@@ -1,47 +1,46 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const db = require('../db');
+const { query } = require('../db');
 const { authenticate, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
 // List tenants (optionally filtered by property)
-router.get('/', authenticate, (req, res) => {
+router.get('/', authenticate, async (req, res) => {
     try {
         const { property_id } = req.query;
-        let tenants;
+        let result;
 
         if (req.user.role === 'landlord') {
             if (property_id) {
-                // Verify ownership
-                const prop = db.prepare('SELECT id FROM properties WHERE id = ? AND owner_id = ?').get(property_id, req.user.id);
-                if (!prop) return res.status(404).json({ error: 'Property not found' });
+                const prop = await query('SELECT id FROM properties WHERE id = $1 AND owner_id = $2', [property_id, req.user.id]);
+                if (prop.rows.length === 0) return res.status(404).json({ error: 'Property not found' });
 
-                tenants = db.prepare(`
-          SELECT t.*, p.name as property_name 
-          FROM tenants t JOIN properties p ON t.property_id = p.id 
-          WHERE t.property_id = ? AND t.is_active = 1 
-          ORDER BY t.created_at DESC
-        `).all(property_id);
+                result = await query(`
+                    SELECT t.*, p.name as property_name 
+                    FROM tenants t JOIN properties p ON t.property_id = p.id 
+                    WHERE t.property_id = $1 AND t.is_active = 1 
+                    ORDER BY t.created_at DESC
+                `, [property_id]);
             } else {
-                tenants = db.prepare(`
-          SELECT t.*, p.name as property_name 
-          FROM tenants t 
-          JOIN properties p ON t.property_id = p.id 
-          WHERE p.owner_id = ? AND t.is_active = 1 
-          ORDER BY t.created_at DESC
-        `).all(req.user.id);
+                result = await query(`
+                    SELECT t.*, p.name as property_name 
+                    FROM tenants t 
+                    JOIN properties p ON t.property_id = p.id 
+                    WHERE p.owner_id = $1 AND t.is_active = 1 
+                    ORDER BY t.created_at DESC
+                `, [req.user.id]);
             }
         } else {
-            tenants = db.prepare(`
-        SELECT t.*, p.name as property_name 
-        FROM tenants t 
-        JOIN properties p ON t.property_id = p.id 
-        WHERE t.user_id = ? AND t.is_active = 1
-      `).all(req.user.id);
+            result = await query(`
+                SELECT t.*, p.name as property_name 
+                FROM tenants t 
+                JOIN properties p ON t.property_id = p.id 
+                WHERE t.user_id = $1 AND t.is_active = 1
+            `, [req.user.id]);
         }
 
-        res.json(tenants);
+        res.json(result.rows);
     } catch (err) {
         console.error('List tenants error:', err);
         res.status(500).json({ error: 'Internal server error' });
@@ -49,7 +48,7 @@ router.get('/', authenticate, (req, res) => {
 });
 
 // Add tenant to property
-router.post('/', authenticate, requireRole('landlord'), (req, res) => {
+router.post('/', authenticate, requireRole('landlord'), async (req, res) => {
     try {
         const { property_id, name, email, phone, lease_start, lease_end } = req.body;
 
@@ -57,27 +56,27 @@ router.post('/', authenticate, requireRole('landlord'), (req, res) => {
             return res.status(400).json({ error: 'Property ID and tenant name are required' });
         }
 
-        const prop = db.prepare('SELECT id FROM properties WHERE id = ? AND owner_id = ?').get(property_id, req.user.id);
-        if (!prop) return res.status(404).json({ error: 'Property not found' });
+        const prop = await query('SELECT id FROM properties WHERE id = $1 AND owner_id = $2', [property_id, req.user.id]);
+        if (prop.rows.length === 0) return res.status(404).json({ error: 'Property not found' });
 
-        // Check if tenant user exists by email
         let user_id = null;
         if (email) {
-            const tenantUser = db.prepare('SELECT id FROM users WHERE email = ? AND role = ?').get(email, 'tenant');
-            if (tenantUser) user_id = tenantUser.id;
+            const tenantUser = await query('SELECT id FROM users WHERE email = $1 AND role = $2', [email, 'tenant']);
+            if (tenantUser.rows.length > 0) user_id = tenantUser.rows[0].id;
         }
 
         const id = uuidv4();
-        db.prepare(
-            'INSERT INTO tenants (id, property_id, user_id, name, email, phone, lease_start, lease_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(id, property_id, user_id, name, email || null, phone || null, lease_start || null, lease_end || null);
-
-        db.prepare('INSERT INTO activity_log (user_id, action, details) VALUES (?, ?, ?)').run(
-            req.user.id, 'add_tenant', `Added tenant ${name} to property`
+        await query(
+            'INSERT INTO tenants (id, property_id, user_id, name, email, phone, lease_start, lease_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+            [id, property_id, user_id, name, email || null, phone || null, lease_start || null, lease_end || null]
         );
 
-        const tenant = db.prepare('SELECT t.*, p.name as property_name FROM tenants t JOIN properties p ON t.property_id = p.id WHERE t.id = ?').get(id);
-        res.status(201).json(tenant);
+        await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)',
+            [req.user.id, 'add_tenant', `Added tenant ${name} to property`]
+        );
+
+        const result = await query('SELECT t.*, p.name as property_name FROM tenants t JOIN properties p ON t.property_id = p.id WHERE t.id = $1', [id]);
+        res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error('Add tenant error:', err);
         res.status(500).json({ error: 'Internal server error' });
@@ -85,18 +84,19 @@ router.post('/', authenticate, requireRole('landlord'), (req, res) => {
 });
 
 // Update tenant
-router.put('/:id', authenticate, requireRole('landlord'), (req, res) => {
+router.put('/:id', authenticate, requireRole('landlord'), async (req, res) => {
     try {
-        const tenant = db.prepare(`
-      SELECT t.* FROM tenants t JOIN properties p ON t.property_id = p.id 
-      WHERE t.id = ? AND p.owner_id = ?
-    `).get(req.params.id, req.user.id);
+        const tenantResult = await query(`
+            SELECT t.* FROM tenants t JOIN properties p ON t.property_id = p.id 
+            WHERE t.id = $1 AND p.owner_id = $2
+        `, [req.params.id, req.user.id]);
+        const tenant = tenantResult.rows[0];
         if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
         const { name, email, phone, lease_start, lease_end, is_active } = req.body;
-        db.prepare(`
-      UPDATE tenants SET name = ?, email = ?, phone = ?, lease_start = ?, lease_end = ?, is_active = ? WHERE id = ?
-    `).run(
+        await query(`
+            UPDATE tenants SET name = $1, email = $2, phone = $3, lease_start = $4, lease_end = $5, is_active = $6 WHERE id = $7
+        `, [
             name || tenant.name,
             email !== undefined ? email : tenant.email,
             phone !== undefined ? phone : tenant.phone,
@@ -104,10 +104,10 @@ router.put('/:id', authenticate, requireRole('landlord'), (req, res) => {
             lease_end || tenant.lease_end,
             is_active !== undefined ? (is_active ? 1 : 0) : tenant.is_active,
             req.params.id
-        );
+        ]);
 
-        const updated = db.prepare('SELECT t.*, p.name as property_name FROM tenants t JOIN properties p ON t.property_id = p.id WHERE t.id = ?').get(req.params.id);
-        res.json(updated);
+        const result = await query('SELECT t.*, p.name as property_name FROM tenants t JOIN properties p ON t.property_id = p.id WHERE t.id = $1', [req.params.id]);
+        res.json(result.rows[0]);
     } catch (err) {
         console.error('Update tenant error:', err);
         res.status(500).json({ error: 'Internal server error' });
@@ -115,18 +115,19 @@ router.put('/:id', authenticate, requireRole('landlord'), (req, res) => {
 });
 
 // Delete tenant (soft delete)
-router.delete('/:id', authenticate, requireRole('landlord'), (req, res) => {
+router.delete('/:id', authenticate, requireRole('landlord'), async (req, res) => {
     try {
-        const tenant = db.prepare(`
-      SELECT t.* FROM tenants t JOIN properties p ON t.property_id = p.id 
-      WHERE t.id = ? AND p.owner_id = ?
-    `).get(req.params.id, req.user.id);
+        const tenantResult = await query(`
+            SELECT t.* FROM tenants t JOIN properties p ON t.property_id = p.id 
+            WHERE t.id = $1 AND p.owner_id = $2
+        `, [req.params.id, req.user.id]);
+        const tenant = tenantResult.rows[0];
         if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
-        db.prepare('UPDATE tenants SET is_active = 0 WHERE id = ?').run(req.params.id);
+        await query('UPDATE tenants SET is_active = 0 WHERE id = $1', [req.params.id]);
 
-        db.prepare('INSERT INTO activity_log (user_id, action, details) VALUES (?, ?, ?)').run(
-            req.user.id, 'remove_tenant', `Removed tenant ${tenant.name}`
+        await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)',
+            [req.user.id, 'remove_tenant', `Removed tenant ${tenant.name}`]
         );
 
         res.json({ message: 'Tenant removed' });

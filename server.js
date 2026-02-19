@@ -2,13 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const { initDB } = require('./db');
 
 // Ensure directories exist
 fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
-fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
-
-// Initialize database (creates tables)
-require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,7 +46,13 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🏠 Rent Management App running at http://localhost:${PORT}`);
-    console.log(`📱 Mobile access: http://192.168.1.106:${PORT}\n`);
+// Initialize database then start server
+initDB().then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`\n🏠 RentFlow running at http://localhost:${PORT}`);
+        console.log(`🗄️  Connected to PostgreSQL (Neon)\n`);
+    });
+}).catch(err => {
+    console.error('Failed to initialize database:', err);
+    process.exit(1);
 });
