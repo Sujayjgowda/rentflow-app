@@ -293,7 +293,36 @@ async function renderDashboard() {
           ${renderTransactionsTable(data.recentTransactions)}</div>
       </div>`;
     } else {
+      // Build pending rent alert banner
+      let pendingBanner = '';
+      const pendingAmt = parseFloat(data.stats.pendingAmount) || 0;
+      if (pendingAmt > 0 || (data.upcomingDues && data.upcomingDues.length > 0)) {
+        const overdueItems = (data.upcomingDues || []).filter(d => d.status === 'overdue');
+        const pendingItems = (data.upcomingDues || []).filter(d => d.status === 'pending');
+        pendingBanner = `
+          <div style="background:linear-gradient(135deg,#dc262620,#f5920020);border:1px solid #dc262640;border-radius:16px;padding:20px 24px;margin-bottom:20px;animation:slideDown 0.4s ease">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+              <span class="material-symbols-rounded" style="font-size:32px;color:#ef4444">notification_important</span>
+              <div>
+                <div style="font-size:1.1rem;font-weight:700;color:#ef4444">⚠️ Rent Payment Pending</div>
+                <div style="font-size:0.9rem;color:var(--text-secondary)">You have <strong>${formatCurrency(pendingAmt)}</strong> in pending payments</div>
+              </div>
+            </div>
+            ${overdueItems.length > 0 ? `<div style="margin-top:8px;padding:12px;background:rgba(239,68,68,0.1);border-radius:10px">
+              <div style="font-weight:600;color:#ef4444;margin-bottom:6px">🔴 Overdue (${overdueItems.length})</div>
+              ${overdueItems.map(d => `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.88rem">
+                <span>${d.property_name} — ${formatCurrency(d.amount)}</span><span style="color:#ef4444">Due: ${formatDate(d.due_date)}</span></div>`).join('')}
+            </div>` : ''}
+            ${pendingItems.length > 0 ? `<div style="margin-top:8px;padding:12px;background:rgba(245,158,11,0.1);border-radius:10px">
+              <div style="font-weight:600;color:#f59e0b;margin-bottom:6px">🟡 Upcoming (${pendingItems.length})</div>
+              ${pendingItems.map(d => `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.88rem">
+                <span>${d.property_name} — ${formatCurrency(d.amount)}</span><span style="color:#f59e0b">Due: ${formatDate(d.due_date)}</span></div>`).join('')}
+            </div>` : ''}
+          </div>`;
+      }
+
       area.innerHTML = `<div class="page-enter">
+        ${pendingBanner}
         <div class="stats-grid">
           <div class="stat-card green"><div class="stat-icon"><span class="material-symbols-rounded">payments</span></div>
             <div class="stat-value">${formatCurrency(data.stats.totalPaid)}</div><div class="stat-label">Total Paid</div></div>
@@ -564,6 +593,7 @@ function renderFullTxTable(txns) {
       <td><div style="display:flex;gap:4px">
         <button class="property-action-btn" title="Edit" onclick='showEditTxModal(${JSON.stringify(t).replace(/'/g, "&#39;")})'><span class="material-symbols-rounded">edit</span></button>
         ${t.status !== 'paid' ? `<button class="property-action-btn" title="Mark Paid" onclick="markTxPaid('${t.id}')"><span class="material-symbols-rounded">check_circle</span></button>` : ''}
+        ${t.status !== 'paid' && t.tenant_phone ? `<button class="property-action-btn" title="WhatsApp Reminder" onclick="sendWhatsAppReminder('${t.tenant_phone}','${esc(t.tenant_name || '')}','${formatCurrency(t.amount)}','${esc(t.property_name || '')}','${t.due_date || ''}')" style="color:#25d366"><span class="material-symbols-rounded">chat</span></button>` : ''}
         ${t.receipt_path ? `<a class="property-action-btn" href="${t.receipt_path}" target="_blank" title="View Receipt"><span class="material-symbols-rounded">attachment</span></a>` : ''}
         <button class="property-action-btn" onclick="deleteTx('${t.id}')"><span class="material-symbols-rounded">delete</span></button>
       </div></td></tr>`).join('')}
@@ -722,6 +752,26 @@ async function submitEditTx(id) {
     closeModal();
     renderTransactions();
   } catch (err) { toast(err.message, 'error'); }
+}
+
+// ========================================
+// WhatsApp Reminder
+// ========================================
+function sendWhatsAppReminder(phone, tenantName, amount, propertyName, dueDate) {
+  // Clean phone number - remove spaces, dashes, and leading zeros
+  let cleanPhone = phone.replace(/[\s\-()]/g, '');
+  // Add India country code if not present
+  if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('91')) {
+    cleanPhone = '91' + cleanPhone;
+  } else if (cleanPhone.startsWith('+')) {
+    cleanPhone = cleanPhone.substring(1);
+  }
+
+  const message = `Hi ${tenantName},\n\nThis is a friendly reminder that your rent payment of *${amount}* for *${propertyName}* was due on *${dueDate}*.\n\nPlease make the payment at your earliest convenience.\n\nThank you! 🏠\n— RentFlow`;
+
+  const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+  window.open(waUrl, '_blank');
+  toast('Opening WhatsApp...', 'success');
 }
 
 // ========================================

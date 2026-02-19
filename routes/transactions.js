@@ -54,7 +54,7 @@ router.get('/', authenticate, async (req, res) => {
         const whereClause = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
 
         const transactions = await query(`
-            SELECT tr.*, p.name as property_name, ten.name as tenant_name
+            SELECT tr.*, p.name as property_name, ten.name as tenant_name, ten.phone as tenant_phone
             FROM transactions tr
             JOIN properties p ON tr.property_id = p.id
             LEFT JOIN tenants ten ON tr.tenant_id = ten.id
