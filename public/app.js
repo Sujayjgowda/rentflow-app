@@ -7,9 +7,8 @@ const IS_NATIVE = window.Capacitor !== undefined ||
   (window.location.protocol === 'https:' && window.location.hostname === 'localhost' && window.location.port === '') ||
   window.location.protocol === 'capacitor:';
 
-// When running as a native app, point to the LAN server
-// Change this IP to your computer's local network IP
-const SERVER_URL = IS_NATIVE ? 'http://192.168.1.106:3000' : '';
+// When running as a native app, point to the cloud server
+const SERVER_URL = IS_NATIVE ? 'https://rentflow-app.onrender.com' : '';
 const API = `${SERVER_URL}/api`;
 let token = localStorage.getItem('rf_token');
 let currentUser = null;
