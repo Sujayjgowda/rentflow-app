@@ -76,8 +76,8 @@ router.post('/', authenticate, requireRole('landlord'), (req, res) => {
         const property = db.prepare('SELECT * FROM properties WHERE id = ?').get(id);
         res.status(201).json(property);
     } catch (err) {
-        console.error('Create property error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Create property error:', err.message, err.stack);
+        res.status(500).json({ error: 'Internal server error', detail: err.message });
     }
 });
 
