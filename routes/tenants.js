@@ -94,15 +94,25 @@ router.put('/:id', authenticate, requireRole('landlord'), async (req, res) => {
         if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
         const { name, email, phone, lease_start, lease_end, is_active } = req.body;
+
+        // Re-link user_id if email is provided
+        let user_id = tenant.user_id;
+        const finalEmail = email !== undefined ? email : tenant.email;
+        if (finalEmail) {
+            const tenantUser = await query('SELECT id FROM users WHERE email = $1 AND role = $2', [finalEmail, 'tenant']);
+            if (tenantUser.rows.length > 0) user_id = tenantUser.rows[0].id;
+        }
+
         await query(`
-            UPDATE tenants SET name = $1, email = $2, phone = $3, lease_start = $4, lease_end = $5, is_active = $6 WHERE id = $7
+            UPDATE tenants SET name = $1, email = $2, phone = $3, lease_start = $4, lease_end = $5, is_active = $6, user_id = $7 WHERE id = $8
         `, [
             name || tenant.name,
-            email !== undefined ? email : tenant.email,
+            finalEmail,
             phone !== undefined ? phone : tenant.phone,
             lease_start || tenant.lease_start,
             lease_end || tenant.lease_end,
             is_active !== undefined ? (is_active ? 1 : 0) : tenant.is_active,
+            user_id,
             req.params.id
         ]);
 

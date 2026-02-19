@@ -35,6 +35,11 @@ router.post('/register', async (req, res) => {
             [id, name, email, password_hash, role, phone || null, avatar_color]
         );
 
+        // If registering as tenant, auto-link any existing tenant records with this email
+        if (role === 'tenant') {
+            await query('UPDATE tenants SET user_id = $1 WHERE email = $2 AND user_id IS NULL', [id, email]);
+        }
+
         await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)',
             [id, 'register', `${name} registered as ${role}`]
         );
