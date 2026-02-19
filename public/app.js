@@ -562,6 +562,7 @@ function renderFullTxTable(txns) {
       <td><span style="text-transform:uppercase;font-size:0.78rem">${t.mode}</span></td>
       <td>${statusBadge(t.status)}</td>
       <td><div style="display:flex;gap:4px">
+        <button class="property-action-btn" title="Edit" onclick='showEditTxModal(${JSON.stringify(t).replace(/'/g, "&#39;")})'><span class="material-symbols-rounded">edit</span></button>
         ${t.status !== 'paid' ? `<button class="property-action-btn" title="Mark Paid" onclick="markTxPaid('${t.id}')"><span class="material-symbols-rounded">check_circle</span></button>` : ''}
         ${t.receipt_path ? `<a class="property-action-btn" href="${t.receipt_path}" target="_blank" title="View Receipt"><span class="material-symbols-rounded">attachment</span></a>` : ''}
         <button class="property-action-btn" onclick="deleteTx('${t.id}')"><span class="material-symbols-rounded">delete</span></button>
@@ -672,6 +673,55 @@ async function deleteTx(id) {
   if (!confirm('Delete this transaction?')) return;
   try { await api(`/transactions/${id}`, { method: 'DELETE' }); toast('Transaction deleted', 'success'); renderTransactions(); }
   catch (err) { toast(err.message, 'error'); }
+}
+
+// ========================================
+// Edit Transaction
+// ========================================
+function showEditTxModal(tx) {
+  openModal('Edit Transaction', `<div class="auth-form">
+    <div class="form-row">
+      <div class="form-group no-icon"><label class="form-label">Amount (₹)</label><input type="number" id="edit-tx-amount" value="${tx.amount}"></div>
+      <div class="form-group no-icon"><label class="form-label">Due Date</label><input type="date" id="edit-tx-due" value="${tx.due_date || ''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group no-icon"><label class="form-label">Mode</label>
+        <select id="edit-tx-mode">
+          <option value="cash" ${tx.mode === 'cash' ? 'selected' : ''}>Cash</option>
+          <option value="bank_transfer" ${tx.mode === 'bank_transfer' ? 'selected' : ''}>Bank Transfer</option>
+          <option value="upi" ${tx.mode === 'upi' ? 'selected' : ''}>UPI</option>
+          <option value="cheque" ${tx.mode === 'cheque' ? 'selected' : ''}>Cheque</option>
+          <option value="other" ${tx.mode === 'other' ? 'selected' : ''}>Other</option>
+        </select></div>
+      <div class="form-group no-icon"><label class="form-label">Status</label>
+        <select id="edit-tx-status">
+          <option value="pending" ${tx.status === 'pending' ? 'selected' : ''}>Pending</option>
+          <option value="paid" ${tx.status === 'paid' ? 'selected' : ''}>Paid</option>
+          <option value="overdue" ${tx.status === 'overdue' ? 'selected' : ''}>Overdue</option>
+        </select></div>
+    </div>
+    <div class="form-group no-icon"><label class="form-label">Date Paid</label><input type="date" id="edit-tx-paid" value="${tx.date_paid || ''}"></div>
+    <div class="form-group no-icon"><label class="form-label">Notes</label><textarea id="edit-tx-notes" style="padding:12px;min-height:60px">${tx.notes || ''}</textarea></div>
+  </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-primary" onclick="submitEditTx('${tx.id}')">Save Changes</button>`);
+}
+
+async function submitEditTx(id) {
+  try {
+    const body = {
+      amount: document.getElementById('edit-tx-amount').value,
+      due_date: document.getElementById('edit-tx-due').value,
+      mode: document.getElementById('edit-tx-mode').value,
+      status: document.getElementById('edit-tx-status').value,
+      date_paid: document.getElementById('edit-tx-paid').value || null,
+      notes: document.getElementById('edit-tx-notes').value
+    };
+    await api(`/transactions/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    toast('Transaction updated!', 'success');
+    closeModal();
+    renderTransactions();
+  } catch (err) { toast(err.message, 'error'); }
 }
 
 // ========================================
