@@ -1,0 +1,17 @@
+{
+    "appId": "com.rentflow.app",
+    "appName": "RentFlow",
+    "webDir": "public",
+    "server": {
+        "androidScheme": "http",
+        "url": "http://192.168.1.106:3000",
+        "cleartext": true
+    },
+    "plugins": {
+        "SplashScreen": {
+            "launchShowDuration": 2000,
+            "backgroundColor": "#0f0f1a",
+            "showSpinner": false
+        }
+    }
+}
