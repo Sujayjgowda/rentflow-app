@@ -67,7 +67,7 @@ router.put('/users/:id', authenticate, requireRole('admin'), async (req, res) =>
             return res.status(400).json({ error: 'Invalid role specified' });
         }
 
-        const userCheck = await query('SELECT id, role, email FROM users WHERE id = $1', [id]);
+        const userCheck = await query('SELECT id, role, email, phone FROM users WHERE id = $1', [id]);
         if (userCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -81,6 +81,14 @@ router.put('/users/:id', authenticate, requireRole('admin'), async (req, res) =>
             }
         }
 
+        // If phone changed, check uniqueness
+        if (phone && phone.trim() !== '' && phone.trim() !== oldUser.phone) {
+            const phoneCheck = await query('SELECT id FROM users WHERE phone = $1 AND id <> $2', [phone.trim(), id]);
+            if (phoneCheck.rows.length > 0) {
+                return res.status(409).json({ error: 'Phone number already registered by another user' });
+            }
+        }
+
         await query(
             'UPDATE users SET name = $1, email = $2, role = $3, phone = $4 WHERE id = $5',
             [name, email, role, phone || null, id]
@@ -88,7 +96,12 @@ router.put('/users/:id', authenticate, requireRole('admin'), async (req, res) =>
 
         // If role changed to tenant, auto-link existing tenant records
         if (role === 'tenant' && oldUser.role !== 'tenant') {
-            await query('UPDATE tenants SET user_id = $1 WHERE email = $2 AND user_id IS NULL', [id, email]);
+            await query(`
+                UPDATE tenants 
+                SET user_id = $1 
+                WHERE (email = $2 OR (phone = $3 AND phone IS NOT NULL AND phone <> ''))
+                  AND user_id IS NULL
+            `, [id, email, phone ? phone.trim() : null]);
         }
 
         await query(

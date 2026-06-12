@@ -25,6 +25,13 @@ router.post('/register', async (req, res) => {
             return res.status(409).json({ error: 'Email already registered' });
         }
 
+        if (phone && phone.trim() !== '') {
+            const existingPhone = await query('SELECT id FROM users WHERE phone = $1', [phone.trim()]);
+            if (existingPhone.rows.length > 0) {
+                return res.status(409).json({ error: 'Phone number already registered' });
+            }
+        }
+
         const id = uuidv4();
         const password_hash = bcrypt.hashSync(password, 10);
         const colors = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
@@ -35,9 +42,14 @@ router.post('/register', async (req, res) => {
             [id, name, email, password_hash, role, phone || null, avatar_color]
         );
 
-        // If registering as tenant, auto-link any existing tenant records with this email
+        // If registering as tenant, auto-link any existing tenant records with this email or phone
         if (role === 'tenant') {
-            await query('UPDATE tenants SET user_id = $1 WHERE email = $2 AND user_id IS NULL', [id, email]);
+            await query(`
+                UPDATE tenants 
+                SET user_id = $1 
+                WHERE (email = $2 OR (phone = $3 AND phone IS NOT NULL AND phone <> ''))
+                  AND user_id IS NULL
+            `, [id, email, phone ? phone.trim() : null]);
         }
 
         await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)',
@@ -62,10 +74,11 @@ router.post('/login', async (req, res) => {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+            return res.status(400).json({ error: 'Email or Mobile and password are required' });
         }
 
-        const result = await query('SELECT * FROM users WHERE email = $1', [email]);
+        const trimmedIdentifier = email.trim();
+        const result = await query('SELECT * FROM users WHERE email = $1 OR phone = $2', [trimmedIdentifier, trimmedIdentifier]);
         const user = result.rows[0];
         if (!user) {
             return res.status(401).json({ error: 'Invalid email or password' });
@@ -118,12 +131,20 @@ router.get('/me', authenticate, async (req, res) => {
 router.put('/me', authenticate, async (req, res) => {
     try {
         const { name, phone } = req.body;
+
+        if (phone && phone.trim() !== '') {
+            const existingPhone = await query('SELECT id FROM users WHERE phone = $1 AND id <> $2', [phone.trim(), req.user.id]);
+            if (existingPhone.rows.length > 0) {
+                return res.status(409).json({ error: 'Phone number already registered by another user' });
+            }
+        }
+
         const updates = [];
         const values = [];
         let paramIdx = 1;
 
         if (name) { updates.push(`name = $${paramIdx++}`); values.push(name); }
-        if (phone !== undefined) { updates.push(`phone = $${paramIdx++}`); values.push(phone); }
+        if (phone !== undefined) { updates.push(`phone = $${paramIdx++}`); values.push(phone ? phone.trim() : null); }
 
         if (updates.length === 0) {
             return res.status(400).json({ error: 'No fields to update' });
