@@ -82,17 +82,41 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/summary', authenticate, async (req, res) => {
     try {
         const { year, property_id } = req.query;
-        const targetYear = year || new Date().getFullYear();
+
+        // 1. Fetch all distinct years present in the transactions table for this context
+        let yearContextFilter = '';
+        let yearContextParams = [];
+        let yearContextParamIdx = 1;
+        if (req.user.role === 'landlord') {
+            yearContextFilter = `JOIN properties p ON tr.property_id = p.id WHERE p.owner_id = $${yearContextParamIdx++}`;
+            yearContextParams.push(req.user.id);
+        } else {
+            yearContextFilter = `LEFT JOIN tenants ten ON tr.tenant_id = ten.id WHERE ten.user_id = $${yearContextParamIdx++}`;
+            yearContextParams.push(req.user.id);
+        }
+        const distinctYearsResult = await query(`
+            SELECT DISTINCT EXTRACT(YEAR FROM tr.due_date::date)::INTEGER as year 
+            FROM transactions tr
+            ${yearContextFilter}
+            ORDER BY year DESC
+        `, yearContextParams);
+        const availableYears = distinctYearsResult.rows.map(r => r.year).filter(Boolean);
+
+        // Determine target year
+        let targetYear = year;
+        if (!targetYear) {
+            targetYear = availableYears.length > 0 ? String(availableYears[0]) : String(new Date().getFullYear());
+        }
 
         let ownerFilter = '';
-        let params = [String(targetYear)];
-        let paramIdx = 2;
+        let params = [];
+        let paramIdx = 1;
 
         if (req.user.role === 'landlord') {
-            ownerFilter = `AND p.owner_id = $${paramIdx++}`;
+            ownerFilter = `p.owner_id = $${paramIdx++}`;
             params.push(req.user.id);
         } else {
-            ownerFilter = `AND ten.user_id = $${paramIdx++}`;
+            ownerFilter = `ten.user_id = $${paramIdx++}`;
             params.push(req.user.id);
         }
 
@@ -101,23 +125,50 @@ router.get('/summary', authenticate, async (req, res) => {
             params.push(property_id);
         }
 
-        // Monthly summary
-        const monthly = await query(`
-            SELECT 
-                CAST(EXTRACT(MONTH FROM tr.due_date::date) AS INTEGER) as month,
-                SUM(CASE WHEN tr.status = 'paid' THEN tr.amount ELSE 0 END) as paid_amount,
-                SUM(CASE WHEN tr.status != 'paid' THEN tr.amount ELSE 0 END) as pending_amount,
-                COUNT(CASE WHEN tr.status = 'paid' THEN 1 END) as paid_count,
-                COUNT(CASE WHEN tr.status = 'pending' THEN 1 END) as pending_count,
-                COUNT(CASE WHEN tr.status = 'overdue' THEN 1 END) as overdue_count,
-                COUNT(*) as total_count
-            FROM transactions tr
-            JOIN properties p ON tr.property_id = p.id
-            LEFT JOIN tenants ten ON tr.tenant_id = ten.id
-            WHERE CAST(EXTRACT(YEAR FROM tr.due_date::date) AS TEXT) = $1 ${ownerFilter}
-            GROUP BY EXTRACT(MONTH FROM tr.due_date::date)
-            ORDER BY month
-        `, params);
+        let yearFilter = '';
+        if (targetYear !== 'all') {
+            yearFilter = `AND CAST(EXTRACT(YEAR FROM tr.due_date::date) AS TEXT) = $${paramIdx++}`;
+            params.push(targetYear);
+        }
+
+        // Monthly or Annual summary
+        let monthlyQuery = '';
+        if (targetYear === 'all') {
+            monthlyQuery = `
+                SELECT 
+                    CAST(EXTRACT(YEAR FROM tr.due_date::date) AS INTEGER) as label_id,
+                    SUM(CASE WHEN tr.status = 'paid' THEN tr.amount ELSE 0 END) as paid_amount,
+                    SUM(CASE WHEN tr.status != 'paid' THEN tr.amount ELSE 0 END) as pending_amount,
+                    COUNT(CASE WHEN tr.status = 'paid' THEN 1 END) as paid_count,
+                    COUNT(CASE WHEN tr.status = 'pending' THEN 1 END) as pending_count,
+                    COUNT(CASE WHEN tr.status = 'overdue' THEN 1 END) as overdue_count,
+                    COUNT(*) as total_count
+                FROM transactions tr
+                JOIN properties p ON tr.property_id = p.id
+                LEFT JOIN tenants ten ON tr.tenant_id = ten.id
+                WHERE ${ownerFilter}
+                GROUP BY EXTRACT(YEAR FROM tr.due_date::date)
+                ORDER BY label_id
+            `;
+        } else {
+            monthlyQuery = `
+                SELECT 
+                    CAST(EXTRACT(MONTH FROM tr.due_date::date) AS INTEGER) as label_id,
+                    SUM(CASE WHEN tr.status = 'paid' THEN tr.amount ELSE 0 END) as paid_amount,
+                    SUM(CASE WHEN tr.status != 'paid' THEN tr.amount ELSE 0 END) as pending_amount,
+                    COUNT(CASE WHEN tr.status = 'paid' THEN 1 END) as paid_count,
+                    COUNT(CASE WHEN tr.status = 'pending' THEN 1 END) as pending_count,
+                    COUNT(CASE WHEN tr.status = 'overdue' THEN 1 END) as overdue_count,
+                    COUNT(*) as total_count
+                FROM transactions tr
+                JOIN properties p ON tr.property_id = p.id
+                LEFT JOIN tenants ten ON tr.tenant_id = ten.id
+                WHERE ${ownerFilter} ${yearFilter}
+                GROUP BY EXTRACT(MONTH FROM tr.due_date::date)
+                ORDER BY label_id
+            `;
+        }
+        const monthly = await query(monthlyQuery, params);
 
         // Annual totals
         const annual = await query(`
@@ -130,7 +181,7 @@ router.get('/summary', authenticate, async (req, res) => {
             FROM transactions tr
             JOIN properties p ON tr.property_id = p.id
             LEFT JOIN tenants ten ON tr.tenant_id = ten.id
-            WHERE CAST(EXTRACT(YEAR FROM tr.due_date::date) AS TEXT) = $1 ${ownerFilter}
+            WHERE ${ownerFilter} ${yearFilter}
         `, params);
 
         // By property breakdown
@@ -143,7 +194,7 @@ router.get('/summary', authenticate, async (req, res) => {
             FROM transactions tr
             JOIN properties p ON tr.property_id = p.id
             LEFT JOIN tenants ten ON tr.tenant_id = ten.id
-            WHERE CAST(EXTRACT(YEAR FROM tr.due_date::date) AS TEXT) = $1 ${ownerFilter}
+            WHERE ${ownerFilter} ${yearFilter}
             GROUP BY p.id, p.name
             ORDER BY paid_amount DESC
         `, params);
@@ -157,7 +208,7 @@ router.get('/summary', authenticate, async (req, res) => {
             FROM transactions tr
             JOIN properties p ON tr.property_id = p.id
             LEFT JOIN tenants ten ON tr.tenant_id = ten.id
-            WHERE tr.status = 'paid' AND CAST(EXTRACT(YEAR FROM tr.due_date::date) AS TEXT) = $1 ${ownerFilter}
+            WHERE tr.status = 'paid' AND ${ownerFilter} ${yearFilter}
             GROUP BY tr.mode
         `, params);
 
@@ -166,7 +217,8 @@ router.get('/summary', authenticate, async (req, res) => {
             annual: annual.rows[0] || { total_paid: 0, total_pending: 0, paid_count: 0, overdue_count: 0, total_count: 0 },
             byProperty: byProperty.rows,
             byMode: byMode.rows,
-            year: parseInt(targetYear)
+            year: targetYear === 'all' ? 'all' : parseInt(targetYear),
+            availableYears
         });
     } catch (err) {
         console.error('Transaction summary error:', err);

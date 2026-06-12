@@ -15,6 +15,8 @@ let currentUser = null;
 let currentPage = '';
 let chartInstances = {};
 let adminUsersList = [];
+let reportSelectedYear = '';
+let reportSelectedProperty = '';
 
 // ========================================
 // API Client
@@ -792,37 +794,98 @@ function sendWhatsAppReminder(phone, tenantName, amount, propertyName, dueDate) 
 // ========================================
 // Reports & Analytics
 // ========================================
-async function renderReports() {
+async function renderReports(selectedYear = reportSelectedYear, selectedProperty = reportSelectedProperty) {
+  reportSelectedYear = selectedYear;
+  reportSelectedProperty = selectedProperty;
+
   const area = document.getElementById('content-area');
   const actions = document.getElementById('top-bar-actions');
-  const currentYear = new Date().getFullYear();
   actions.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="exportCSV()">
     <span class="material-symbols-rounded">download</span>Export CSV</button>`;
+
   try {
-    const data = await api(`/transactions/summary?year=${currentYear}`);
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const paidData = new Array(12).fill(0);
-    const pendingData = new Array(12).fill(0);
-    (data.monthly || []).forEach(m => { paidData[m.month - 1] = m.paid_amount; pendingData[m.month - 1] = m.pending_amount; });
+    const params = new URLSearchParams();
+    if (selectedYear) params.set('year', selectedYear);
+    if (selectedProperty) params.set('property_id', selectedProperty);
+
+    const data = await api(`/transactions/summary?${params}`);
+
+    if (!reportSelectedYear) {
+      reportSelectedYear = String(data.year);
+    }
+
+    let propertiesList = [];
+    if (currentUser.role === 'landlord') {
+      try {
+        propertiesList = await api('/properties');
+      } catch (e) {
+        console.warn('Failed to fetch properties for report dropdown:', e);
+      }
+    }
+
+    let chartLabels = [];
+    let paidData = [];
+    let pendingData = [];
+
+    const isAllTime = reportSelectedYear === 'all';
+
+    if (isAllTime) {
+      chartLabels = (data.monthly || []).map(m => String(m.label_id));
+      paidData = (data.monthly || []).map(m => m.paid_amount);
+      pendingData = (data.monthly || []).map(m => m.pending_amount);
+    } else {
+      chartLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      paidData = new Array(12).fill(0);
+      pendingData = new Array(12).fill(0);
+      (data.monthly || []).forEach(m => {
+        const idx = m.label_id - 1;
+        if (idx >= 0 && idx < 12) {
+          paidData[idx] = m.paid_amount;
+          pendingData[idx] = m.pending_amount;
+        }
+      });
+    }
+
+    const years = data.availableYears || [new Date().getFullYear()];
+    const yearOptions = [
+      `<option value="all" ${reportSelectedYear === 'all' ? 'selected' : ''}>All Time (All Years)</option>`,
+      ...years.map(y => `<option value="${y}" ${String(y) === String(reportSelectedYear) ? 'selected' : ''}>Year ${y}</option>`)
+    ].join('');
+
+    const propertyFilterHTML = currentUser.role === 'landlord' ? `
+      <select class="filter-select" id="report-filter-prop" onchange="renderReports(reportSelectedYear, this.value)">
+        <option value="">All Properties</option>
+        ${propertiesList.map(p => `<option value="${p.id}" ${p.id === reportSelectedProperty ? 'selected' : ''}>${p.name}</option>`).join('')}
+      </select>
+    ` : '';
+
+    const displayYearTitle = isAllTime ? 'All Time' : `Year ${reportSelectedYear}`;
 
     area.innerHTML = `<div class="page-enter">
+      <div class="filters-bar">
+        <select class="filter-select" id="report-filter-year" onchange="renderReports(this.value, reportSelectedProperty)">
+          ${yearOptions}
+        </select>
+        ${propertyFilterHTML}
+      </div>
+
       <div class="stats-grid">
         <div class="stat-card green"><div class="stat-icon"><span class="material-symbols-rounded">trending_up</span></div>
-          <div class="stat-value">${formatCurrency(data.annual?.total_paid || 0)}</div><div class="stat-label">Total Collected (${currentYear})</div></div>
+          <div class="stat-value">${formatCurrency(data.annual?.total_paid || 0)}</div><div class="stat-label">Total Collected (${displayYearTitle})</div></div>
         <div class="stat-card red"><div class="stat-icon"><span class="material-symbols-rounded">trending_down</span></div>
-          <div class="stat-value">${formatCurrency(data.annual?.total_pending || 0)}</div><div class="stat-label">Outstanding</div></div>
+          <div class="stat-value">${formatCurrency(data.annual?.total_pending || 0)}</div><div class="stat-label">Outstanding (${displayYearTitle})</div></div>
         <div class="stat-card accent"><div class="stat-icon"><span class="material-symbols-rounded">receipt</span></div>
-          <div class="stat-value">${data.annual?.total_count || 0}</div><div class="stat-label">Total Transactions</div></div>
+          <div class="stat-value">${data.annual?.total_count || 0}</div><div class="stat-label">Total Transactions (${displayYearTitle})</div></div>
         <div class="stat-card amber"><div class="stat-icon"><span class="material-symbols-rounded">error</span></div>
-          <div class="stat-value">${data.annual?.overdue_count || 0}</div><div class="stat-label">Overdue</div></div>
+          <div class="stat-value">${data.annual?.overdue_count || 0}</div><div class="stat-label">Overdue (${displayYearTitle})</div></div>
       </div>
       <div class="content-grid">
-        <div class="card"><div class="card-header"><span class="card-title">Monthly Overview (${currentYear})</span></div>
+        <div class="card"><div class="card-header"><span class="card-title">${isAllTime ? 'Annual Overview' : 'Monthly Overview'} (${displayYearTitle})</span></div>
           <div class="chart-container"><canvas id="monthlyChart"></canvas></div></div>
         <div class="card"><div class="card-header"><span class="card-title">Payment Modes</span></div>
           <div class="chart-container"><canvas id="modeChart"></canvas></div></div>
       </div>
-      ${(data.byProperty || []).length > 0 ? `<div class="card"><div class="card-header"><span class="card-title">By Property</span></div>
+      ${(data.byProperty || []).length > 0 ? `<div class="card"><div class="card-header"><span class="card-title">By Property Breakdown (${displayYearTitle})</span></div>
         <div class="data-table-wrapper"><table class="data-table"><thead><tr>
           <th>Property</th><th>Collected</th><th>Outstanding</th><th>Transactions</th></tr></thead><tbody>
           ${data.byProperty.map(p => `<tr><td style="font-weight:600">${p.name}</td>
@@ -832,11 +895,11 @@ async function renderReports() {
         </tbody></table></div></div>` : ''}
     </div>`;
 
-    // Monthly bar chart
+    // Monthly/Annual bar chart
     const ctx1 = document.getElementById('monthlyChart').getContext('2d');
     chartInstances.monthly = new Chart(ctx1, {
       type: 'bar', data: {
-        labels: months,
+        labels: chartLabels,
         datasets: [
           { label: 'Collected', data: paidData, backgroundColor: 'rgba(16,185,129,0.7)', borderRadius: 6 },
           { label: 'Pending', data: pendingData, backgroundColor: 'rgba(245,158,11,0.7)', borderRadius: 6 }
@@ -866,6 +929,11 @@ async function renderReports() {
           plugins: { legend: { position: 'bottom', labels: { color: '#a0a0b8', padding: 16, font: { family: 'Inter' } } } }
         }
       });
+    } else {
+      const modeChartCanvas = document.getElementById('modeChart');
+      if (modeChartCanvas) {
+        modeChartCanvas.parentElement.innerHTML = '<div class="empty-state" style="padding: 20px;"><span class="material-symbols-rounded">payments</span><p>No paid transactions to show</p></div>';
+      }
     }
   } catch (err) {
     area.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded">error</span><h3>Error</h3><p>${err.message}</p></div>`;
