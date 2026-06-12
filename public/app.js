@@ -1330,9 +1330,19 @@ function renderAdminUsersTable(users) {
                 </td>
                 <td>${formatDate(u.created_at)}</td>
                 <td>
-                  <button class="btn btn-secondary btn-sm" onclick="showAdminResetPasswordModal('${u.id}', '${esc(u.name)}')">
-                    <span class="material-symbols-rounded" style="font-size:16px">lock_reset</span>Reset Password
-                  </button>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn btn-secondary btn-sm" onclick="showAdminEditUserModal('${u.id}', '${esc(u.name)}', '${esc(u.email)}', '${esc(u.phone || '')}', '${u.role}')" title="Edit Info">
+                      <span class="material-symbols-rounded" style="font-size:16px">edit</span>Edit
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="showAdminResetPasswordModal('${u.id}', '${esc(u.name)}')" title="Reset Password">
+                      <span class="material-symbols-rounded" style="font-size:16px">lock_reset</span>Reset
+                    </button>
+                    ${u.id !== currentUser.id ? `
+                      <button class="btn btn-danger btn-sm" onclick="deleteAdminUser('${u.id}', '${esc(u.name)}')" title="Delete User">
+                        <span class="material-symbols-rounded" style="font-size:16px">delete</span>Delete
+                      </button>
+                    ` : ''}
+                  </div>
                 </td>
               </tr>
             `;
@@ -1354,6 +1364,80 @@ function applyAdminUserFilters() {
   });
 
   document.getElementById('admin-users-table-card').innerHTML = renderAdminUsersTable(filtered);
+}
+
+function showAdminEditUserModal(userId, name, email, phone, role) {
+  openModal(`Edit User — ${name}`, `
+    <div class="auth-form" style="margin-top: 15px;">
+      <div class="form-group">
+        <span class="material-symbols-rounded input-icon">person</span>
+        <input type="text" id="admin-edit-name" placeholder="Full name" value="${name}" required>
+      </div>
+      <div class="form-group">
+        <span class="material-symbols-rounded input-icon">email</span>
+        <input type="email" id="admin-edit-email" placeholder="Email address" value="${email}" required>
+      </div>
+      <div class="form-group">
+        <span class="material-symbols-rounded input-icon">phone</span>
+        <input type="tel" id="admin-edit-phone" placeholder="Phone number" value="${phone}">
+      </div>
+      <div class="form-group no-icon">
+        <label class="form-label">Role</label>
+        <select id="admin-edit-role">
+          <option value="landlord" ${role === 'landlord' ? 'selected' : ''}>Landlord</option>
+          <option value="tenant" ${role === 'tenant' ? 'selected' : ''}>Tenant</option>
+          <option value="admin" ${role === 'admin' ? 'selected' : ''}>Admin</option>
+        </select>
+      </div>
+      <div id="admin-edit-error" class="auth-error hidden" style="margin-top: 10px;"></div>
+    </div>
+  `, `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="submitAdminEditUser('${userId}')">Save Changes</button>
+  `);
+}
+
+async function submitAdminEditUser(userId) {
+  const name = document.getElementById('admin-edit-name').value;
+  const email = document.getElementById('admin-edit-email').value;
+  const phone = document.getElementById('admin-edit-phone').value;
+  const role = document.getElementById('admin-edit-role').value;
+  const errorEl = document.getElementById('admin-edit-error');
+
+  if (!name || !email || !role) {
+    errorEl.textContent = 'Name, email, and role are required';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  errorEl.classList.add('hidden');
+
+  try {
+    await api(`/admin/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, email, phone, role })
+    });
+    toast('User updated successfully!', 'success');
+    closeModal();
+    renderAdminUsers();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove('hidden');
+  }
+}
+
+async function deleteAdminUser(userId, userName) {
+  if (!confirm(`Are you sure you want to delete user "${userName}"? This will delete all their properties, leases, agreements, and advance payments. This action CANNOT be undone.`)) {
+    return;
+  }
+
+  try {
+    await api(`/admin/users/${userId}`, { method: 'DELETE' });
+    toast(`User "${userName}" deleted successfully`, 'success');
+    renderAdminUsers();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 function showAdminResetPasswordModal(userId, userName) {
