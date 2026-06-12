@@ -167,11 +167,13 @@ function setupSidebar() {
         { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
         { id: 'properties', icon: 'domain', label: 'Properties' },
         { id: 'tenants', icon: 'group', label: 'Tenants' },
+        { id: 'agreements', icon: 'description', label: 'Agreements' },
       ]
     },
     {
       section: 'Finance', items: [
         { id: 'transactions', icon: 'receipt_long', label: 'Transactions' },
+        { id: 'advances', icon: 'savings', label: 'Advance Amount' },
         { id: 'reports', icon: 'bar_chart', label: 'Reports' },
       ]
     }
@@ -179,7 +181,9 @@ function setupSidebar() {
     {
       section: 'Main', items: [
         { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
+        { id: 'agreements', icon: 'description', label: 'Agreements' },
         { id: 'transactions', icon: 'receipt_long', label: 'My Payments' },
+        { id: 'advances', icon: 'savings', label: 'Advance Amount' },
         { id: 'reports', icon: 'bar_chart', label: 'Reports' },
       ]
     }
@@ -218,7 +222,7 @@ function navigate(page) {
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 
-  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics' };
+  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics', agreements: 'Rent Agreements', advances: 'Advance Amount' };
   document.getElementById('page-title').textContent = titles[page] || page;
 
   const area = document.getElementById('content-area');
@@ -233,6 +237,8 @@ function navigate(page) {
     case 'tenants': renderTenants(); break;
     case 'transactions': renderTransactions(); break;
     case 'reports': renderReports(); break;
+    case 'agreements': renderAgreements(); break;
+    case 'advances': renderAdvances(); break;
   }
 }
 
@@ -871,6 +877,376 @@ async function exportCSV() {
     a.href = url; a.download = `rent_transactions_${new Date().toISOString().split('T')[0]}.csv`;
     a.click(); URL.revokeObjectURL(url);
     toast('CSV exported!', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+// ========================================
+// Rent Agreements Page
+// ========================================
+async function renderAgreements() {
+  const area = document.getElementById('content-area');
+  const actions = document.getElementById('top-bar-actions');
+  const isLandlord = currentUser.role === 'landlord';
+
+  try {
+    const agreements = await api('/agreements');
+    const properties = isLandlord ? await api('/properties') : [];
+
+    if (isLandlord) {
+      actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="showUploadAgreementModal()">
+        <span class="material-symbols-rounded">upload_file</span>Upload Agreement</button>`;
+    }
+
+    if (agreements.length === 0) {
+      area.innerHTML = `<div class="page-enter empty-state">
+        <span class="material-symbols-rounded">description</span>
+        <h3>No agreements yet</h3>
+        <p>${isLandlord ? 'Upload a rent agreement document for your properties.' : 'No rent agreement has been uploaded by your landlord yet.'}</p>
+        ${isLandlord ? '<button class="btn btn-primary" onclick="showUploadAgreementModal()"><span class="material-symbols-rounded">upload_file</span>Upload Agreement</button>' : ''}
+      </div>`;
+      return;
+    }
+
+    area.innerHTML = `<div class="page-enter">
+      <div class="agreement-grid">${agreements.map(ag => {
+        const isImage = ag.file_type && ag.file_type.startsWith('image/');
+        const isPdf = ag.file_type && ag.file_type.includes('pdf');
+        const previewUrl = `${SERVER_URL}${ag.file_path}`;
+        return `
+        <div class="agreement-card">
+          <div class="agreement-card-header">
+            <div class="agreement-icon">
+              <span class="material-symbols-rounded">${isPdf ? 'picture_as_pdf' : 'image'}</span>
+            </div>
+            <div class="agreement-meta">
+              <div class="agreement-property">${ag.property_name}</div>
+              <div class="agreement-filename">${ag.file_name}</div>
+            </div>
+          </div>
+          <div class="agreement-preview">
+            ${isImage ? `<img src="${previewUrl}" alt="Agreement preview" class="agreement-preview-img" onclick="window.open('${previewUrl}','_blank')">`
+              : isPdf ? `<div class="agreement-pdf-preview" onclick="window.open('${previewUrl}','_blank')">
+                  <span class="material-symbols-rounded" style="font-size:48px;color:var(--accent-light)">picture_as_pdf</span>
+                  <span>Click to view PDF</span>
+                </div>`
+              : `<div class="agreement-pdf-preview" onclick="window.open('${previewUrl}','_blank')">
+                  <span class="material-symbols-rounded" style="font-size:48px;color:var(--accent-light)">description</span>
+                  <span>Click to view</span>
+                </div>`}
+          </div>
+          <div class="agreement-info">
+            <div class="agreement-info-row">
+              <span class="material-symbols-rounded" style="font-size:16px">person</span>
+              <span>Uploaded by ${ag.uploaded_by_name || 'Unknown'}</span>
+            </div>
+            <div class="agreement-info-row">
+              <span class="material-symbols-rounded" style="font-size:16px">calendar_today</span>
+              <span>${formatDate(ag.updated_at || ag.created_at)}</span>
+            </div>
+          </div>
+          <div class="agreement-actions">
+            <a href="${previewUrl}" target="_blank" class="btn btn-secondary btn-sm">
+              <span class="material-symbols-rounded">visibility</span>View
+            </a>
+            <a href="${previewUrl}" download="${ag.file_name}" class="btn btn-secondary btn-sm">
+              <span class="material-symbols-rounded">download</span>Download
+            </a>
+            ${isLandlord ? `
+              <button class="btn btn-secondary btn-sm" onclick="showReplaceAgreementModal('${ag.property_id}','${esc(ag.property_name)}')">
+                <span class="material-symbols-rounded">sync</span>Replace
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteAgreement('${ag.property_id}')">
+                <span class="material-symbols-rounded">delete</span>Delete
+              </button>
+            ` : ''}
+          </div>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  } catch (err) {
+    area.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded">error</span><h3>Error</h3><p>${err.message}</p></div>`;
+  }
+}
+
+async function showUploadAgreementModal() {
+  let propsHtml = '';
+  try {
+    const props = await api('/properties');
+    propsHtml = props.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  } catch { }
+  openModal('Upload Rent Agreement', `<div class="auth-form">
+    <div class="form-group no-icon"><label class="form-label">Property</label>
+      <select id="agree-prop">${propsHtml}</select></div>
+    <div class="form-group no-icon"><label class="form-label">Agreement Document</label>
+      <div class="upload-area" onclick="document.getElementById('agree-file').click()">
+        <span class="material-symbols-rounded">cloud_upload</span>
+        <p>Click to upload agreement (PDF, JPG, PNG, WebP)</p>
+        <div class="file-name" id="agree-filename"></div>
+      </div>
+      <input type="file" id="agree-file" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="document.getElementById('agree-filename').textContent=this.files[0]?.name||''">
+    </div>
+  </div>`,
+  `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+   <button class="btn btn-primary" onclick="submitAgreement()">Upload</button>`);
+}
+
+function showReplaceAgreementModal(propertyId, propertyName) {
+  openModal('Replace Agreement — ' + propertyName, `<div class="auth-form">
+    <div class="form-group no-icon"><label class="form-label">New Agreement Document</label>
+      <div class="upload-area" onclick="document.getElementById('agree-replace-file').click()">
+        <span class="material-symbols-rounded">cloud_upload</span>
+        <p>Click to upload new agreement (PDF, JPG, PNG, WebP)</p>
+        <div class="file-name" id="agree-replace-filename"></div>
+      </div>
+      <input type="file" id="agree-replace-file" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="document.getElementById('agree-replace-filename').textContent=this.files[0]?.name||''">
+    </div>
+  </div>`,
+  `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+   <button class="btn btn-primary" onclick="submitReplaceAgreement('${propertyId}')">Replace</button>`);
+}
+
+async function submitAgreement() {
+  const propId = document.getElementById('agree-prop').value;
+  const file = document.getElementById('agree-file').files[0];
+  if (!file) { toast('Please select a file', 'warning'); return; }
+  try {
+    const formData = new FormData();
+    formData.append('agreement', file);
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API}/agreements/${propId}`, { method: 'POST', headers, body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    toast('Agreement uploaded!', 'success');
+    closeModal();
+    renderAgreements();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function submitReplaceAgreement(propId) {
+  const file = document.getElementById('agree-replace-file').files[0];
+  if (!file) { toast('Please select a file', 'warning'); return; }
+  try {
+    const formData = new FormData();
+    formData.append('agreement', file);
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API}/agreements/${propId}`, { method: 'POST', headers, body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    toast('Agreement replaced!', 'success');
+    closeModal();
+    renderAgreements();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function deleteAgreement(propId) {
+  if (!confirm('Delete this agreement document? This cannot be undone.')) return;
+  try {
+    await api(`/agreements/${propId}`, { method: 'DELETE' });
+    toast('Agreement deleted', 'success');
+    renderAgreements();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+// ========================================
+// Advance Amount Page
+// ========================================
+async function renderAdvances() {
+  const area = document.getElementById('content-area');
+  const actions = document.getElementById('top-bar-actions');
+  const isLandlord = currentUser.role === 'landlord';
+
+  if (isLandlord) {
+    actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="showAddAdvanceModal()">
+      <span class="material-symbols-rounded">add</span>Add Advance</button>`;
+  }
+
+  try {
+    const properties = isLandlord ? await api('/properties') : [];
+    const data = await api('/advances');
+    const advances = data.advances || [];
+    const totalAdvance = data.total_advance || 0;
+
+    // Build filter bar for landlord
+    const filterBar = isLandlord ? `<div class="filters-bar">
+      <select class="filter-select" id="adv-filter-prop" onchange="applyAdvanceFilters()">
+        <option value="">All Properties</option>
+        ${properties.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+      </select>
+    </div>` : '';
+
+    if (advances.length === 0) {
+      area.innerHTML = `<div class="page-enter">
+        ${filterBar}
+        <div class="empty-state">
+          <span class="material-symbols-rounded">savings</span>
+          <h3>No advance payments</h3>
+          <p>${isLandlord ? 'Record advance payments from your tenants.' : 'No advance payments have been recorded yet.'}</p>
+          ${isLandlord ? '<button class="btn btn-primary" onclick="showAddAdvanceModal()"><span class="material-symbols-rounded">add</span>Add Advance</button>' : ''}
+        </div>
+      </div>`;
+      return;
+    }
+
+    area.innerHTML = `<div class="page-enter">
+      ${filterBar}
+      <div class="advance-summary-card">
+        <div class="advance-summary-icon">
+          <span class="material-symbols-rounded">account_balance_wallet</span>
+        </div>
+        <div class="advance-summary-content">
+          <div class="advance-summary-label">Total Advance Amount</div>
+          <div class="advance-summary-value">${formatCurrency(totalAdvance)}</div>
+        </div>
+        <div class="advance-summary-count">
+          <span>${advances.length}</span>
+          <span class="advance-summary-count-label">Payment${advances.length !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+      <div class="card" id="advance-table-card">
+        ${renderAdvanceTable(advances, isLandlord)}
+      </div>
+    </div>`;
+  } catch (err) {
+    area.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded">error</span><h3>Error</h3><p>${err.message}</p></div>`;
+  }
+}
+
+function renderAdvanceTable(advances, isLandlord) {
+  if (!advances || advances.length === 0) {
+    return '<div class="empty-state"><span class="material-symbols-rounded">savings</span><h3>No advance payments</h3></div>';
+  }
+  return `<div class="data-table-wrapper"><table class="data-table"><thead><tr>
+    <th>Tenant</th><th>Property</th><th>Amount</th><th>Date Paid</th><th>Notes</th>${isLandlord ? '<th>Actions</th>' : ''}
+  </tr></thead><tbody>
+    ${advances.map(a => `<tr>
+      <td style="font-weight:600">${a.tenant_name}</td>
+      <td>${a.property_name}</td>
+      <td style="font-weight:700;color:var(--green-text)">${formatCurrency(a.amount)}</td>
+      <td>${formatDate(a.paid_date)}</td>
+      <td>${a.notes || '—'}</td>
+      ${isLandlord ? `<td><div style="display:flex;gap:4px">
+        <button class="property-action-btn" onclick="showEditAdvanceModal('${a.id}',${a.amount},'${a.paid_date}','${esc(a.notes || '')}')"><span class="material-symbols-rounded">edit</span></button>
+        <button class="property-action-btn" onclick="deleteAdvance('${a.id}')"><span class="material-symbols-rounded">delete</span></button>
+      </div></td>` : ''}
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+async function applyAdvanceFilters() {
+  const propId = document.getElementById('adv-filter-prop').value;
+  const params = propId ? `?property_id=${propId}` : '';
+  try {
+    const data = await api(`/advances${params}`);
+    const advances = data.advances || [];
+    const totalAdvance = data.total_advance || 0;
+    const isLandlord = currentUser.role === 'landlord';
+
+    // Update summary card
+    const summaryValue = document.querySelector('.advance-summary-value');
+    const summaryCount = document.querySelector('.advance-summary-count span:first-child');
+    if (summaryValue) summaryValue.textContent = formatCurrency(totalAdvance);
+    if (summaryCount) summaryCount.textContent = advances.length;
+
+    document.getElementById('advance-table-card').innerHTML = renderAdvanceTable(advances, isLandlord);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function showAddAdvanceModal() {
+  let propsHtml = '', tenantsHtml = '';
+  try {
+    const props = await api('/properties');
+    propsHtml = props.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    const tenants = await api('/tenants');
+    tenantsHtml = tenants.map(t => `<option value="${t.id}" data-prop="${t.property_id}">${t.name} (${t.property_name})</option>`).join('');
+  } catch { }
+  const today = new Date().toISOString().split('T')[0];
+  openModal('Add Advance Payment', `<div class="auth-form">
+    <div class="form-row">
+      <div class="form-group no-icon"><label class="form-label">Property</label>
+        <select id="adv-prop" onchange="filterAdvanceTenants()">${propsHtml}</select></div>
+      <div class="form-group no-icon"><label class="form-label">Tenant</label>
+        <select id="adv-tenant">${tenantsHtml}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group no-icon"><label class="form-label">Amount (₹)</label>
+        <input type="number" id="adv-amount" placeholder="50000" required></div>
+      <div class="form-group no-icon"><label class="form-label">Date Paid</label>
+        <input type="date" id="adv-date" value="${today}" required></div>
+    </div>
+    <div class="form-group no-icon"><label class="form-label">Notes</label>
+      <textarea id="adv-notes" style="padding:12px;min-height:60px" placeholder="Optional notes..."></textarea></div>
+  </div>`,
+  `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+   <button class="btn btn-primary" onclick="submitAdvance()">Add Advance</button>`);
+  filterAdvanceTenants();
+}
+
+function filterAdvanceTenants() {
+  const propId = document.getElementById('adv-prop').value;
+  const tenantSelect = document.getElementById('adv-tenant');
+  Array.from(tenantSelect.options).forEach(opt => {
+    if (opt.dataset.prop) {
+      opt.style.display = opt.dataset.prop === propId ? '' : 'none';
+    }
+  });
+  // Select first visible option
+  const firstVisible = Array.from(tenantSelect.options).find(o => o.style.display !== 'none');
+  if (firstVisible) tenantSelect.value = firstVisible.value;
+}
+
+async function submitAdvance() {
+  try {
+    const body = {
+      property_id: document.getElementById('adv-prop').value,
+      tenant_id: document.getElementById('adv-tenant').value,
+      amount: document.getElementById('adv-amount').value,
+      paid_date: document.getElementById('adv-date').value,
+      notes: document.getElementById('adv-notes').value
+    };
+    await api('/advances', { method: 'POST', body: JSON.stringify(body) });
+    toast('Advance payment recorded!', 'success');
+    closeModal();
+    renderAdvances();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function showEditAdvanceModal(id, amount, paidDate, notes) {
+  openModal('Edit Advance Payment', `<div class="auth-form">
+    <div class="form-row">
+      <div class="form-group no-icon"><label class="form-label">Amount (₹)</label>
+        <input type="number" id="edit-adv-amount" value="${amount}"></div>
+      <div class="form-group no-icon"><label class="form-label">Date Paid</label>
+        <input type="date" id="edit-adv-date" value="${paidDate}"></div>
+    </div>
+    <div class="form-group no-icon"><label class="form-label">Notes</label>
+      <textarea id="edit-adv-notes" style="padding:12px;min-height:60px">${notes}</textarea></div>
+  </div>`,
+  `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+   <button class="btn btn-primary" onclick="submitEditAdvance('${id}')">Save Changes</button>`);
+}
+
+async function submitEditAdvance(id) {
+  try {
+    const body = {
+      amount: document.getElementById('edit-adv-amount').value,
+      paid_date: document.getElementById('edit-adv-date').value,
+      notes: document.getElementById('edit-adv-notes').value
+    };
+    await api(`/advances/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    toast('Advance updated!', 'success');
+    closeModal();
+    renderAdvances();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function deleteAdvance(id) {
+  if (!confirm('Delete this advance payment record?')) return;
+  try {
+    await api(`/advances/${id}`, { method: 'DELETE' });
+    toast('Advance deleted', 'success');
+    renderAdvances();
   } catch (err) { toast(err.message, 'error'); }
 }
 

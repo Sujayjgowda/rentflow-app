@@ -68,6 +68,28 @@ async function initDB() {
                 details TEXT,
                 created_at TIMESTAMP DEFAULT NOW()
             );
+
+            CREATE TABLE IF NOT EXISTS rent_agreements (
+                id TEXT PRIMARY KEY,
+                property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+                file_name TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                file_type TEXT,
+                uploaded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS advance_payments (
+                id TEXT PRIMARY KEY,
+                property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+                tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                amount NUMERIC NOT NULL,
+                paid_date TEXT NOT NULL,
+                notes TEXT,
+                created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
         `);
     console.log('✅ Database tables initialized');
   } catch (err) {

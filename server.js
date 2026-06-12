@@ -8,6 +8,7 @@ const { initDB, query } = require('./db');
 
 // Ensure directories exist
 fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
+fs.mkdirSync(path.join(__dirname, 'uploads', 'agreements'), { recursive: true });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,6 +30,8 @@ app.use('/api/properties', require('./routes/properties'));
 app.use('/api/tenants', require('./routes/tenants'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/agreements', require('./routes/agreements'));
+app.use('/api/advances', require('./routes/advances'));
 
 // Health check
 app.get('/api/health', (req, res) => {
