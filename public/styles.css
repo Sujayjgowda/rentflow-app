@@ -940,6 +940,21 @@ a:hover {
   color: var(--red-text);
 }
 
+.status-badge.admin {
+  background: rgba(139, 92, 246, 0.16);
+  color: #c084fc;
+}
+
+.status-badge.landlord {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.status-badge.tenant {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
 .status-dot {
   width: 6px;
   height: 6px;

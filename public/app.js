@@ -14,6 +14,7 @@ let token = localStorage.getItem('rf_token');
 let currentUser = null;
 let currentPage = '';
 let chartInstances = {};
+let adminUsersList = [];
 
 // ========================================
 // API Client
@@ -154,14 +155,21 @@ async function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
   setupSidebar();
-  navigate('dashboard');
+  navigate(currentUser.role === 'admin' ? 'admin_users' : 'dashboard');
 }
 
 function setupSidebar() {
   const nav = document.getElementById('sidebar-nav');
   const isLandlord = currentUser.role === 'landlord';
+  const isAdmin = currentUser.role === 'admin';
 
-  const items = isLandlord ? [
+  const items = isAdmin ? [
+    {
+      section: 'Admin', items: [
+        { id: 'admin_users', icon: 'manage_accounts', label: 'User Management' }
+      ]
+    }
+  ] : isLandlord ? [
     {
       section: 'Main', items: [
         { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
@@ -222,7 +230,7 @@ function navigate(page) {
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 
-  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics', agreements: 'Rent Agreements', advances: 'Advance Amount' };
+  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics', agreements: 'Rent Agreements', advances: 'Advance Amount', admin_users: 'User Management' };
   document.getElementById('page-title').textContent = titles[page] || page;
 
   const area = document.getElementById('content-area');
@@ -239,6 +247,7 @@ function navigate(page) {
     case 'reports': renderReports(); break;
     case 'agreements': renderAgreements(); break;
     case 'advances': renderAdvances(); break;
+    case 'admin_users': renderAdminUsers(); break;
   }
 }
 
@@ -1248,6 +1257,154 @@ async function deleteAdvance(id) {
     toast('Advance deleted', 'success');
     renderAdvances();
   } catch (err) { toast(err.message, 'error'); }
+}
+
+// ========================================
+// Admin Dashboard Pages & Logic
+// ========================================
+async function renderAdminUsers() {
+  const area = document.getElementById('content-area');
+  const actions = document.getElementById('top-bar-actions');
+  actions.innerHTML = '';
+
+  try {
+    adminUsersList = await api('/admin/users');
+    area.innerHTML = `
+      <div class="page-enter">
+        <div class="filters-bar">
+          <div class="form-group no-icon" style="flex: 2; margin-bottom: 0;">
+            <input type="text" class="filter-input" id="admin-search-user" oninput="applyAdminUserFilters()" placeholder="Search users by name or email..." style="width: 100%;">
+          </div>
+          <select class="filter-select" id="admin-filter-role" onchange="applyAdminUserFilters()">
+            <option value="">All Roles</option>
+            <option value="landlord">Landlord</option>
+            <option value="tenant">Tenant</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="card" id="admin-users-table-card">
+          ${renderAdminUsersTable(adminUsersList)}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    area.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded">error</span><h3>Error</h3><p>${err.message}</p></div>`;
+  }
+}
+
+function renderAdminUsersTable(users) {
+  if (!users || users.length === 0) {
+    return '<div class="empty-state"><span class="material-symbols-rounded">group</span><h3>No users found</h3></div>';
+  }
+
+  return `
+    <div class="data-table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Role</th>
+            <th>Registered Date</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${users.map(u => {
+            const initials = u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+            return `
+              <tr>
+                <td>
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div class="user-avatar" style="background:${u.avatar_color || '#6366f1'};width:36px;height:36px;font-size:0.9rem;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">${initials}</div>
+                    <span style="font-weight:600">${u.name}</span>
+                  </div>
+                </td>
+                <td>${u.email}</td>
+                <td>${u.phone || '—'}</td>
+                <td>
+                  <span class="status-badge ${u.role}">
+                    ${u.role.toUpperCase()}
+                  </span>
+                </td>
+                <td>${formatDate(u.created_at)}</td>
+                <td>
+                  <button class="btn btn-secondary btn-sm" onclick="showAdminResetPasswordModal('${u.id}', '${esc(u.name)}')">
+                    <span class="material-symbols-rounded" style="font-size:16px">lock_reset</span>Reset Password
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function applyAdminUserFilters() {
+  const query = document.getElementById('admin-search-user').value.toLowerCase().trim();
+  const role = document.getElementById('admin-filter-role').value;
+
+  const filtered = adminUsersList.filter(u => {
+    const matchesSearch = u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query);
+    const matchesRole = !role || u.role === role;
+    return matchesSearch && matchesRole;
+  });
+
+  document.getElementById('admin-users-table-card').innerHTML = renderAdminUsersTable(filtered);
+}
+
+function showAdminResetPasswordModal(userId, userName) {
+  openModal(`Reset Password — ${userName}`, `
+    <div class="auth-form" style="margin-top: 15px;">
+      <div class="form-group">
+        <span class="material-symbols-rounded input-icon">lock</span>
+        <input type="password" id="admin-new-password" placeholder="Enter new password (min 6 chars)" required minlength="6">
+      </div>
+      <div class="form-group">
+        <span class="material-symbols-rounded input-icon">lock</span>
+        <input type="password" id="admin-confirm-password" placeholder="Confirm new password" required minlength="6">
+      </div>
+      <div id="reset-password-error" class="auth-error hidden" style="margin-top: 10px;"></div>
+    </div>
+  `, `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="submitAdminResetPassword('${userId}')">Reset Password</button>
+  `);
+}
+
+async function submitAdminResetPassword(userId) {
+  const newPassword = document.getElementById('admin-new-password').value;
+  const confirmPassword = document.getElementById('admin-confirm-password').value;
+  const errorEl = document.getElementById('reset-password-error');
+
+  if (!newPassword || newPassword.length < 6) {
+    errorEl.textContent = 'Password must be at least 6 characters long';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    errorEl.textContent = 'Passwords do not match';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  errorEl.classList.add('hidden');
+
+  try {
+    await api(`/admin/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword })
+    });
+    toast('Password reset successfully!', 'success');
+    closeModal();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove('hidden');
+  }
 }
 
 // ========================================

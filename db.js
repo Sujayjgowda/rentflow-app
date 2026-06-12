@@ -15,7 +15,7 @@ async function initDB() {
                 name TEXT NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                role TEXT NOT NULL CHECK(role IN ('landlord', 'tenant')),
+                role TEXT NOT NULL CHECK(role IN ('landlord', 'tenant', 'admin')),
                 phone TEXT,
                 avatar_color TEXT DEFAULT '#6366f1',
                 created_at TIMESTAMP DEFAULT NOW()
@@ -92,6 +92,34 @@ async function initDB() {
             );
         `);
     console.log('✅ Database tables initialized');
+
+    // Run schema constraint migration if needed
+    try {
+      await client.query(`
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+        ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('landlord', 'tenant', 'admin'));
+      `);
+      console.log('✅ Users role constraint verified/migrated');
+    } catch (migrationErr) {
+      console.warn('⚠️ Users role constraint migration warning:', migrationErr.message);
+    }
+
+    // Seed admin account if it doesn't exist
+    const adminCheck = await client.query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+    if (adminCheck.rows.length === 0) {
+      const bcrypt = require('bcryptjs');
+      const { v4: uuidv4 } = require('uuid');
+      const adminId = uuidv4();
+      const adminEmail = process.env.ADMIN_EMAIL || 'admin@rentflow.com';
+      const adminPassword = process.env.ADMIN_PASSWORD || 'AdminPassword123';
+      const passwordHash = bcrypt.hashSync(adminPassword, 10);
+
+      await client.query(`
+        INSERT INTO users (id, name, email, password_hash, role, avatar_color)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [adminId, 'RentFlow Admin', adminEmail, passwordHash, 'admin', '#4f46e5']);
+      console.log(`👤 Seeded default admin user: ${adminEmail}`);
+    }
   } catch (err) {
     console.error('❌ Database initialization error:', err.message);
     throw err;
