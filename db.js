@@ -90,6 +90,20 @@ async function initDB() {
                 created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMP DEFAULT NOW()
             );
+
+            CREATE TABLE IF NOT EXISTS shared_bills (
+                id TEXT PRIMARY KEY,
+                property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+                tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                bill_name TEXT NOT NULL,
+                total_amount NUMERIC NOT NULL,
+                tenant_share NUMERIC NOT NULL,
+                due_date TEXT NOT NULL,
+                file_path TEXT,
+                status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('paid', 'pending')),
+                created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
         `);
     console.log('✅ Database tables initialized');
 

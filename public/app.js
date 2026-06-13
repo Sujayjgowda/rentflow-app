@@ -184,6 +184,7 @@ function setupSidebar() {
       section: 'Finance', items: [
         { id: 'transactions', icon: 'receipt_long', label: 'Transactions' },
         { id: 'advances', icon: 'savings', label: 'Advance Amount' },
+        { id: 'bills', icon: 'receipt', label: 'Shared Bills' },
         { id: 'reports', icon: 'bar_chart', label: 'Reports' },
       ]
     }
@@ -194,6 +195,7 @@ function setupSidebar() {
         { id: 'agreements', icon: 'description', label: 'Agreements' },
         { id: 'transactions', icon: 'receipt_long', label: 'My Payments' },
         { id: 'advances', icon: 'savings', label: 'Advance Amount' },
+        { id: 'bills', icon: 'receipt', label: 'Shared Bills' },
         { id: 'reports', icon: 'bar_chart', label: 'Reports' },
       ]
     }
@@ -232,7 +234,7 @@ function navigate(page) {
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 
-  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics', agreements: 'Rent Agreements', advances: 'Advance Amount', admin_users: 'User Management' };
+  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics', agreements: 'Rent Agreements', advances: 'Advance Amount', admin_users: 'User Management', bills: 'Shared Bills' };
   document.getElementById('page-title').textContent = titles[page] || page;
 
   const area = document.getElementById('content-area');
@@ -250,6 +252,7 @@ function navigate(page) {
     case 'agreements': renderAgreements(); break;
     case 'advances': renderAdvances(); break;
     case 'admin_users': renderAdminUsers(); break;
+    case 'bills': renderBills(); break;
   }
 }
 
@@ -1556,6 +1559,332 @@ async function submitAdminResetPassword(userId) {
   } catch (err) {
     errorEl.textContent = err.message;
     errorEl.classList.remove('hidden');
+  }
+}
+
+// ========================================
+// Shared Bills Pages & Logic
+// ========================================
+let sharedBillsList = [];
+
+async function renderBills() {
+  const area = document.getElementById('content-area');
+  const actions = document.getElementById('top-bar-actions');
+  const isLandlord = currentUser.role === 'landlord';
+
+  if (isLandlord) {
+    actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="showAddBillModal()">
+      <span class="material-symbols-rounded">upload_file</span>Upload Bill</button>`;
+  }
+
+  try {
+    const properties = isLandlord ? await api('/properties') : [];
+    const data = await api('/bills');
+    sharedBillsList = data.bills || [];
+    const totalPending = data.total_pending || 0;
+
+    const filterBar = `
+      <div class="filters-bar">
+        ${isLandlord ? `
+          <select class="filter-select" id="bill-filter-prop" onchange="applyBillFilters()">
+            <option value="">All Properties</option>
+            ${properties.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+          </select>
+        ` : ''}
+        <select class="filter-select" id="bill-filter-status" onchange="applyBillFilters()">
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="paid">Paid</option>
+        </select>
+      </div>
+    `;
+
+    area.innerHTML = `
+      <div class="page-enter">
+        ${filterBar}
+        <div class="advance-summary-card" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); margin-bottom: 20px;">
+          <div class="advance-summary-icon" style="background: rgba(255, 255, 255, 0.12); color: #fff;">
+            <span class="material-symbols-rounded">receipt_long</span>
+          </div>
+          <div class="advance-summary-content">
+            <div class="advance-summary-label">${isLandlord ? 'Total Pending Tenant Shares' : 'My Outstanding Share (50%)'}</div>
+            <div class="advance-summary-value" style="color: #fff;">${formatCurrency(totalPending)}</div>
+          </div>
+          <div class="advance-summary-count" style="background: rgba(255, 255, 255, 0.15); color: #fff;">
+            <span>${sharedBillsList.filter(b => b.status === 'pending').length}</span>
+            <span class="advance-summary-count-label">Unpaid</span>
+          </div>
+        </div>
+        <div class="card" id="bills-table-card">
+          ${renderBillsTable(sharedBillsList)}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    area.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded">error</span><h3>Error</h3><p>${err.message}</p></div>`;
+  }
+}
+
+function renderBillsTable(bills) {
+  if (!bills || bills.length === 0) {
+    return '<div class="empty-state"><span class="material-symbols-rounded">receipt</span><h3>No bills found</h3><p>Uploaded bills split 50/50 will appear here.</p></div>';
+  }
+
+  const isLandlord = currentUser.role === 'landlord';
+
+  return `
+    <div class="data-table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Bill Name</th>
+            <th>Property</th>
+            <th>Tenant</th>
+            <th>Total Amount</th>
+            <th>Tenant Share (50%)</th>
+            <th>Due Date</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bills.map(b => {
+            const fileUrl = b.file_path ? `${SERVER_URL}${b.file_path}` : null;
+            const statusClass = b.status === 'paid' ? 'paid' : 'overdue';
+            return `
+              <tr>
+                <td style="font-weight: 600">${b.bill_name}</td>
+                <td>${b.property_name}</td>
+                <td>${b.tenant_name}</td>
+                <td>${formatCurrency(b.total_amount)}</td>
+                <td style="font-weight: 700; color: var(--accent-light)">${formatCurrency(b.tenant_share)}</td>
+                <td>${formatDate(b.due_date)}</td>
+                <td><span class="status-badge ${statusClass}">${b.status.toUpperCase()}</span></td>
+                <td>
+                  <div style="display:flex;gap:6px">
+                    ${fileUrl ? `<a href="${fileUrl}" target="_blank" class="btn btn-secondary btn-sm" title="View Document"><span class="material-symbols-rounded" style="font-size:16px">visibility</span>View</a>` : ''}
+                    ${isLandlord ? `
+                      ${b.status !== 'paid' ? `<button class="btn btn-secondary btn-sm" onclick="markBillPaid('${b.id}')"><span class="material-symbols-rounded" style="font-size:16px">check_circle</span>Mark Paid</button>` : ''}
+                      <button class="property-action-btn" onclick="showEditBillModal('${b.id}', '${esc(b.bill_name)}', ${b.total_amount}, '${b.due_date}', '${b.status}')"><span class="material-symbols-rounded">edit</span></button>
+                      <button class="property-action-btn" onclick="deleteBill('${b.id}')"><span class="material-symbols-rounded">delete</span></button>
+                    ` : ''}
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function applyBillFilters() {
+  const propSelect = document.getElementById('bill-filter-prop');
+  const statusSelect = document.getElementById('bill-filter-status');
+  
+  const params = new URLSearchParams();
+  if (propSelect && propSelect.value) params.set('property_id', propSelect.value);
+  if (statusSelect && statusSelect.value) params.set('status', statusSelect.value);
+
+  try {
+    const data = await api(`/bills?${params}`);
+    sharedBillsList = data.bills || [];
+    const totalPending = data.total_pending || 0;
+
+    const summaryValue = document.querySelector('.advance-summary-value');
+    const summaryCount = document.querySelector('.advance-summary-count span:first-child');
+    if (summaryValue) summaryValue.textContent = formatCurrency(totalPending);
+    if (summaryCount) summaryCount.textContent = sharedBillsList.filter(b => b.status === 'pending').length;
+
+    document.getElementById('bills-table-card').innerHTML = renderBillsTable(sharedBillsList);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function showAddBillModal() {
+  let propsHtml = '', tenantsHtml = '';
+  try {
+    const props = await api('/properties');
+    propsHtml = props.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    const tenants = await api('/tenants');
+    tenantsHtml = tenants.map(t => `<option value="${t.id}" data-prop="${t.property_id}">${t.name} (${t.property_name})</option>`).join('');
+  } catch { }
+
+  const today = new Date().toISOString().split('T')[0];
+
+  openModal('Upload Shared Bill (50/50 Split)', `
+    <div class="auth-form">
+      <div class="form-row">
+        <div class="form-group no-icon"><label class="form-label">Property</label>
+          <select id="bill-prop" onchange="filterBillTenants()">${propsHtml}</select></div>
+        <div class="form-group no-icon"><label class="form-label">Tenant</label>
+          <select id="bill-tenant">${tenantsHtml}</select></div>
+      </div>
+      <div class="form-group"><span class="material-symbols-rounded input-icon">receipt</span>
+        <input type="text" id="bill-name" placeholder="Bill Name (e.g., Water Bill - June)" required></div>
+      <div class="form-row">
+        <div class="form-group no-icon"><label class="form-label">Total Amount (₹)</label>
+          <input type="number" id="bill-amount" placeholder="1000" oninput="updateSplitPreview()" required></div>
+        <div class="form-group no-icon"><label class="form-label">Due Date</label>
+          <input type="date" id="bill-due" value="${today}" required></div>
+      </div>
+      <div style="background:rgba(99,102,241,0.08); border:1px dashed rgba(99,102,241,0.3); border-radius:10px; padding:12px; margin-bottom:15px; text-align:center;">
+        <span style="font-size:0.85rem; color:var(--text-secondary)">Automatic Split Calculator:</span>
+        <div style="font-size:1.15rem; font-weight:700; color:var(--accent-light); margin-top:4px;">
+          Tenant Share (50%): <span id="bill-split-preview">₹0</span>
+        </div>
+      </div>
+      <div class="form-group no-icon"><label class="form-label">Bill File Attachment</label>
+        <div class="upload-area" onclick="document.getElementById('bill-file-input').click()">
+          <span class="material-symbols-rounded">cloud_upload</span>
+          <p>Click to upload bill image/PDF</p>
+          <div class="file-name" id="bill-file-name-preview"></div>
+        </div>
+        <input type="file" id="bill-file-input" accept=".jpg,.jpeg,.png,.pdf,.webp" style="display:none" onchange="document.getElementById('bill-file-name-preview').textContent=this.files[0]?.name||''">
+      </div>
+    </div>
+  `, `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="submitBill()">Upload & Split</button>
+  `);
+  filterBillTenants();
+}
+
+function filterBillTenants() {
+  const propId = document.getElementById('bill-prop').value;
+  const tenantSelect = document.getElementById('bill-tenant');
+  Array.from(tenantSelect.options).forEach(opt => {
+    if (opt.dataset.prop) {
+      opt.style.display = opt.dataset.prop === propId ? '' : 'none';
+    }
+  });
+  const firstVisible = Array.from(tenantSelect.options).find(o => o.style.display !== 'none');
+  if (firstVisible) tenantSelect.value = firstVisible.value;
+}
+
+function updateSplitPreview() {
+  const amtInput = document.getElementById('bill-amount');
+  const preview = document.getElementById('bill-split-preview');
+  if (amtInput && preview) {
+    const val = parseFloat(amtInput.value) || 0;
+    preview.textContent = formatCurrency(val / 2);
+  }
+}
+
+async function submitBill() {
+  try {
+    const file = document.getElementById('bill-file-input').files[0];
+    const formData = new FormData();
+    formData.append('property_id', document.getElementById('bill-prop').value);
+    formData.append('tenant_id', document.getElementById('bill-tenant').value);
+    formData.append('bill_name', document.getElementById('bill-name').value);
+    formData.append('total_amount', document.getElementById('bill-amount').value);
+    formData.append('due_date', document.getElementById('bill-due').value);
+    if (file) formData.append('bill', file);
+
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${API}/bills`, {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    toast('Bill split and recorded!', 'success');
+    closeModal();
+    renderBills();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function showEditBillModal(id, name, totalAmount, dueDate, status) {
+  openModal('Edit Shared Bill', `
+    <div class="auth-form">
+      <div class="form-group"><span class="material-symbols-rounded input-icon">receipt</span>
+        <input type="text" id="edit-bill-name" placeholder="Bill Name" value="${name}" required></div>
+      <div class="form-row">
+        <div class="form-group no-icon"><label class="form-label">Total Amount (₹)</label>
+          <input type="number" id="edit-bill-amount" placeholder="Total" value="${totalAmount}" oninput="updateEditSplitPreview()" required></div>
+        <div class="form-group no-icon"><label class="form-label">Due Date</label>
+          <input type="date" id="edit-bill-due" value="${dueDate}" required></div>
+      </div>
+      <div style="background:rgba(99,102,241,0.08); border:1px dashed rgba(99,102,241,0.3); border-radius:10px; padding:12px; margin-bottom:15px; text-align:center;">
+        <span style="font-size:0.85rem; color:var(--text-secondary)">Automatic Split Calculator:</span>
+        <div style="font-size:1.15rem; font-weight:700; color:var(--accent-light); margin-top:4px;">
+          Tenant Share (50%): <span id="edit-bill-split-preview">${formatCurrency(totalAmount / 2)}</span>
+        </div>
+      </div>
+      <div class="form-group no-icon"><label class="form-label">Status</label>
+        <select id="edit-bill-status">
+          <option value="pending" ${status === 'pending' ? 'selected' : ''}>Pending (Unpaid)</option>
+          <option value="paid" ${status === 'paid' ? 'selected' : ''}>Paid</option>
+        </select>
+      </div>
+    </div>
+  `, `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="submitEditBill('${id}')">Save Changes</button>
+  `);
+}
+
+function updateEditSplitPreview() {
+  const amtInput = document.getElementById('edit-bill-amount');
+  const preview = document.getElementById('edit-bill-split-preview');
+  if (amtInput && preview) {
+    const val = parseFloat(amtInput.value) || 0;
+    preview.textContent = formatCurrency(val / 2);
+  }
+}
+
+async function submitEditBill(id) {
+  try {
+    const body = {
+      bill_name: document.getElementById('edit-bill-name').value,
+      total_amount: document.getElementById('edit-bill-amount').value,
+      due_date: document.getElementById('edit-bill-due').value,
+      status: document.getElementById('edit-bill-status').value
+    };
+
+    await api(`/bills/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    });
+
+    toast('Bill updated successfully!', 'success');
+    closeModal();
+    renderBills();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function markBillPaid(id) {
+  try {
+    await api(`/bills/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'paid' })
+    });
+    toast('Bill marked as paid!', 'success');
+    renderBills();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function deleteBill(id) {
+  if (!confirm('Delete this shared bill? This cannot be undone.')) return;
+  try {
+    await api(`/bills/${id}`, { method: 'DELETE' });
+    toast('Bill deleted successfully', 'success');
+    renderBills();
+  } catch (err) {
+    toast(err.message, 'error');
   }
 }
 
