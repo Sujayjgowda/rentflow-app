@@ -186,6 +186,7 @@ function setupSidebar() {
         { id: 'advances', icon: 'savings', label: 'Advance Amount' },
         { id: 'bills', icon: 'receipt', label: 'Shared Bills' },
         { id: 'reports', icon: 'bar_chart', label: 'Reports' },
+        { id: 'rent_receipts', icon: 'receipt_long', label: 'Rent Receipts' },
       ]
     }
   ] : [
@@ -197,6 +198,7 @@ function setupSidebar() {
         { id: 'advances', icon: 'savings', label: 'Advance Amount' },
         { id: 'bills', icon: 'receipt', label: 'Shared Bills' },
         { id: 'reports', icon: 'bar_chart', label: 'Reports' },
+        { id: 'rent_receipts', icon: 'receipt_long', label: 'Rent Receipts' },
       ]
     }
   ];
@@ -234,7 +236,7 @@ function navigate(page) {
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 
-  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics', agreements: 'Rent Agreements', advances: 'Advance Amount', admin_users: 'User Management', bills: 'Shared Bills' };
+  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics', agreements: 'Rent Agreements', advances: 'Advance Amount', admin_users: 'User Management', bills: 'Shared Bills', rent_receipts: 'Rent Receipt Generator' };
   document.getElementById('page-title').textContent = titles[page] || page;
 
   const area = document.getElementById('content-area');
@@ -253,6 +255,7 @@ function navigate(page) {
     case 'advances': renderAdvances(); break;
     case 'admin_users': renderAdminUsers(); break;
     case 'bills': renderBills(); break;
+    case 'rent_receipts': renderRentReceipts(); break;
   }
 }
 
@@ -1886,6 +1889,432 @@ async function deleteBill(id) {
   } catch (err) {
     toast(err.message, 'error');
   }
+}
+
+// ========================================
+// Rent Receipt Generator
+// ========================================
+function numberToWords(num) {
+  if (num === 0) return 'zero';
+  const ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+    'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+  const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+
+  function convertChunk(n) {
+    if (n === 0) return '';
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+    return ones[Math.floor(n / 100)] + ' hundred' + (n % 100 ? ' and ' + convertChunk(n % 100) : '');
+  }
+
+  // Indian numbering: crore, lakh, thousand, hundred
+  let result = '';
+  const crore = Math.floor(num / 10000000);
+  num %= 10000000;
+  const lakh = Math.floor(num / 100000);
+  num %= 100000;
+  const thousand = Math.floor(num / 1000);
+  num %= 1000;
+
+  if (crore) result += convertChunk(crore) + ' crore ';
+  if (lakh) result += convertChunk(lakh) + ' lakh ';
+  if (thousand) result += convertChunk(thousand) + ' thousand ';
+  if (num) result += convertChunk(num);
+
+  return result.trim();
+}
+
+async function renderRentReceipts() {
+  const area = document.getElementById('content-area');
+  const isLandlord = currentUser.role === 'landlord';
+
+  let propsHtml = '<option value="">— Select Property —</option>';
+  let tenantsData = [];
+
+  try {
+    if (isLandlord) {
+      const props = await api('/properties');
+      propsHtml += props.map(p => `<option value="${p.id}" data-name="${esc(p.name)}" data-address="${esc(p.address || '')}" data-rent="${p.rent_amount}">${p.name}</option>`).join('');
+      tenantsData = await api('/tenants');
+    }
+  } catch { }
+
+  area.innerHTML = `<div class="page-enter">
+    <div class="receipt-form-header">
+      <div class="receipt-form-header-icon">
+        <span class="material-symbols-rounded">receipt_long</span>
+      </div>
+      <div>
+        <h2 style="margin:0;font-size:1.4rem;font-weight:700;color:var(--text-primary)">Create Rent Receipts</h2>
+        <p style="margin:4px 0 0;color:var(--text-secondary);font-size:0.92rem">
+          Looking for rent receipts for tax saving? Fill the form below, generate & download the PDF. Easy 😊
+        </p>
+      </div>
+    </div>
+
+    <div class="card receipt-generator-form">
+      ${isLandlord ? `<div class="receipt-form-section">
+        <div class="receipt-form-section-title">
+          <span class="material-symbols-rounded">auto_awesome</span> Auto-fill from your data
+        </div>
+        <div class="receipt-form-row">
+          <div class="form-group no-icon">
+            <label class="form-label">Select Property</label>
+            <select id="rr-autofill-prop" onchange="autoFillReceiptFromProperty()">${propsHtml}</select>
+          </div>
+          <div class="form-group no-icon">
+            <label class="form-label">Select Tenant</label>
+            <select id="rr-autofill-tenant" onchange="autoFillReceiptFromTenant()">
+              <option value="">— Select Tenant —</option>
+              ${tenantsData.map(t => `<option value="${t.id}" data-name="${esc(t.name)}" data-phone="${esc(t.phone || '')}" data-prop="${t.property_id}">${t.name} (${t.property_name})</option>`).join('')}
+            </select>
+          </div>
+        </div>
+      </div>` : ''}
+
+      <div class="receipt-form-section">
+        <div class="receipt-form-section-title">
+          <span class="material-symbols-rounded">person</span> Tenant Details
+        </div>
+        <div class="receipt-form-row">
+          <div class="form-group no-icon">
+            <label class="form-label">Tenant Name *</label>
+            <input type="text" id="rr-tenant-name" placeholder="Tenant's Name" required>
+          </div>
+          <div class="form-group no-icon">
+            <label class="form-label">Tenant Phone</label>
+            <input type="tel" id="rr-tenant-phone" placeholder="+91 Tenant's Phone">
+          </div>
+        </div>
+      </div>
+
+      <div class="receipt-form-section">
+        <div class="receipt-form-section-title">
+          <span class="material-symbols-rounded">domain</span> Owner Details
+        </div>
+        <div class="receipt-form-row">
+          <div class="form-group no-icon">
+            <label class="form-label">Owner Name *</label>
+            <input type="text" id="rr-owner-name" placeholder="Owner's Name" value="${esc(currentUser.name)}" required>
+          </div>
+          <div class="form-group no-icon">
+            <label class="form-label">Owner Phone</label>
+            <input type="tel" id="rr-owner-phone" placeholder="+91 Owner's Phone" value="${esc(currentUser.phone || '')}">
+          </div>
+        </div>
+        <div class="receipt-form-row">
+          <div class="form-group no-icon">
+            <label class="form-label">Owner PAN</label>
+            <input type="text" id="rr-owner-pan" placeholder="Owner's PAN (e.g. ABCDE1234F)" maxlength="10" style="text-transform:uppercase">
+          </div>
+          <div class="form-group no-icon">
+            <label class="form-label">Owner Address</label>
+            <textarea id="rr-owner-address" placeholder="Current address of the owner" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="receipt-form-section">
+        <div class="receipt-form-section-title">
+          <span class="material-symbols-rounded">home</span> Property & Rent
+        </div>
+        <div class="receipt-form-row">
+          <div class="form-group no-icon">
+            <label class="form-label">Monthly Rent (₹) *</label>
+            <input type="number" id="rr-rent" placeholder="Monthly Rent in Rs." required oninput="checkPanWarning()">
+          </div>
+          <div class="form-group no-icon">
+            <label class="form-label">Rented Property Address *</label>
+            <textarea id="rr-property-address" placeholder="Address of property as required in rent receipts" rows="2" required></textarea>
+          </div>
+        </div>
+        <div id="rr-pan-warning" class="receipt-pan-warning" style="display:none">
+          <span class="material-symbols-rounded">warning</span>
+          <span>Annual rent exceeds ₹1,00,000. Owner PAN is mandatory for tenant's HRA exemption claim.</span>
+        </div>
+      </div>
+
+      <div class="receipt-form-section">
+        <div class="receipt-form-section-title">
+          <span class="material-symbols-rounded">payments</span> Payment Details
+        </div>
+        <div class="receipt-form-row">
+          <div class="form-group no-icon">
+            <label class="form-label">Mode of Payment *</label>
+            <select id="rr-payment-mode" onchange="toggleTxnRef()">
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="NEFT">NEFT / Bank Transfer</option>
+              <option value="Cheque">Cheque</option>
+            </select>
+          </div>
+          <div class="form-group no-icon" id="rr-txn-ref-group">
+            <label class="form-label">Transaction Ref</label>
+            <input type="text" id="rr-txn-ref" placeholder="Cheque No. / UTR / UPI Txn ID">
+          </div>
+        </div>
+      </div>
+
+      <div class="receipt-form-section">
+        <div class="receipt-form-section-title">
+          <span class="material-symbols-rounded">date_range</span> Receipt Period
+        </div>
+        <div class="receipt-form-row">
+          <div class="form-group no-icon">
+            <label class="form-label">Receipt Start Date *</label>
+            <input type="date" id="rr-start-date" required>
+          </div>
+          <div class="form-group no-icon">
+            <label class="form-label">Receipt End Date *</label>
+            <input type="date" id="rr-end-date" required>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:0 24px 28px;text-align:center">
+        <button class="btn receipt-generate-btn" onclick="generateReceiptPDF()">
+          <span class="material-symbols-rounded">picture_as_pdf</span>
+          Generate Rent Receipt Now
+        </button>
+      </div>
+    </div>
+  </div>`;
+
+  // Initialize: hide txn ref for Cash (default)
+  toggleTxnRef();
+}
+
+function autoFillReceiptFromProperty() {
+  const sel = document.getElementById('rr-autofill-prop');
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) return;
+
+  const address = opt.dataset.address || '';
+  const rent = opt.dataset.rent || '';
+
+  document.getElementById('rr-property-address').value = address;
+  document.getElementById('rr-rent').value = rent;
+  checkPanWarning();
+
+  // Filter tenants dropdown to show only tenants of this property
+  const tenantSel = document.getElementById('rr-autofill-tenant');
+  if (tenantSel) {
+    const propId = opt.value;
+    Array.from(tenantSel.options).forEach(o => {
+      if (!o.value) return; // skip placeholder
+      o.style.display = o.dataset.prop === propId ? '' : 'none';
+    });
+    tenantSel.value = '';
+  }
+}
+
+function autoFillReceiptFromTenant() {
+  const sel = document.getElementById('rr-autofill-tenant');
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) return;
+
+  document.getElementById('rr-tenant-name').value = opt.dataset.name || '';
+  document.getElementById('rr-tenant-phone').value = opt.dataset.phone || '';
+}
+
+function checkPanWarning() {
+  const rent = parseFloat(document.getElementById('rr-rent').value) || 0;
+  const warning = document.getElementById('rr-pan-warning');
+  if (warning) {
+    warning.style.display = (rent * 12 > 100000) ? 'flex' : 'none';
+  }
+}
+
+function toggleTxnRef() {
+  const mode = document.getElementById('rr-payment-mode').value;
+  const group = document.getElementById('rr-txn-ref-group');
+  if (group) {
+    group.style.display = mode === 'Cash' ? 'none' : '';
+  }
+}
+
+function generateReceiptPDF() {
+  // Validate required fields
+  const tenantName = document.getElementById('rr-tenant-name').value.trim();
+  const ownerName = document.getElementById('rr-owner-name').value.trim();
+  const rent = parseFloat(document.getElementById('rr-rent').value);
+  const propertyAddress = document.getElementById('rr-property-address').value.trim();
+  const ownerAddress = document.getElementById('rr-owner-address').value.trim();
+  const ownerPAN = document.getElementById('rr-owner-pan').value.trim().toUpperCase();
+  const paymentMode = document.getElementById('rr-payment-mode').value;
+  const txnRef = document.getElementById('rr-txn-ref').value.trim();
+  const startDate = document.getElementById('rr-start-date').value;
+  const endDate = document.getElementById('rr-end-date').value;
+
+  if (!tenantName) { toast('Please enter tenant name', 'error'); return; }
+  if (!ownerName) { toast('Please enter owner name', 'error'); return; }
+  if (!rent || rent <= 0) { toast('Please enter a valid rent amount', 'error'); return; }
+  if (!propertyAddress) { toast('Please enter the rented property address', 'error'); return; }
+  if (!startDate || !endDate) { toast('Please select both start and end dates', 'error'); return; }
+
+  // PAN warning for annual rent > 1 lakh
+  if (rent * 12 > 100000 && !ownerPAN) {
+    if (!confirm('Annual rent exceeds ₹1,00,000 but Owner PAN is not provided. This is required for HRA exemption claims. Continue anyway?')) return;
+  }
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (end < start) { toast('End date must be after start date', 'error'); return; }
+
+  // Calculate months
+  const months = [];
+  const current = new Date(start.getFullYear(), start.getMonth(), 1);
+  const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (current <= endMonth) {
+    months.push(new Date(current));
+    current.setMonth(current.getMonth() + 1);
+  }
+
+  if (months.length === 0) { toast('No months in the selected range', 'error'); return; }
+  if (months.length > 24) { toast('Maximum 24 months allowed at a time', 'warning'); return; }
+
+  // Generate PDF using jsPDF
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageW = doc.internal.pageSize.getWidth();   // 210
+  const pageH = doc.internal.pageSize.getHeight();   // 297
+  const margin = 15;
+  const receiptH = 132;  // height of each receipt box (slightly taller for new fields)
+  const contentW = pageW - margin * 2;
+
+  const rentWords = numberToWords(Math.floor(rent));
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+  const showRevenueStamp = paymentMode === 'Cash' && rent > 5000;
+
+  months.forEach((month, idx) => {
+    // Two receipts per page: position 0 (top) or 1 (bottom)
+    const posOnPage = idx % 2;
+    if (idx > 0 && posOnPage === 0) {
+      doc.addPage();
+    }
+
+    const yStart = posOnPage === 0 ? margin : margin + receiptH + 10;
+    const receiptNo = String(idx + 1).padStart(3, '0');
+
+    // Draw border rectangle
+    doc.setDrawColor(160, 160, 160);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, yStart, contentW, receiptH);
+
+    let y = yStart + 14;
+
+    // Title: "HOUSE RENT RECEIPT" — bold, centered
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('HOUSE RENT RECEIPT', pageW / 2, y, { align: 'center' });
+    y += 10;
+
+    // Receipt No + Date on same line
+    const monthYear = `${monthNames[month.getMonth()]} ${month.getFullYear()}`;
+    const dayStr = `01 ${monthYear}`;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Receipt No: ${receiptNo}`, margin + 8, y);
+    doc.text(`Dated: ${dayStr}`, margin + contentW - 8, y, { align: 'right' });
+    y += 10;
+
+    // Main paragraph
+    const bodyText = `This is to acknowledge the receipt from ${tenantName} the sum of Rupees ${Math.floor(rent)}/- (Rupees ${rentWords} only) in lieu of rent payment for the month of ${monthYear}, towards the property bearing the address "${propertyAddress}".`;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    const lines = doc.splitTextToSize(bodyText, contentW - 16);
+    doc.text(lines, margin + 8, y);
+    y += lines.length * 4.5 + 6;
+
+    // Rent Period, Mode of Payment, Transaction Ref
+    const labelX = margin + 8;
+    const valueX = margin + 50;
+    doc.setFontSize(9.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.text('Rent Period:', labelX, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text(monthYear, valueX, y);
+    y += 5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.text('Mode of Payment:', labelX, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text(paymentMode, valueX, y);
+    y += 5;
+
+    if (txnRef && paymentMode !== 'Cash') {
+      doc.setFont('helvetica', 'normal');
+      doc.text('Transaction Ref:', labelX, y);
+      doc.setFont('helvetica', 'bold');
+      doc.text(txnRef, valueX, y);
+      y += 5;
+    }
+
+    y += 4;
+
+    // Owner's Name and Address
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.text("Owner's Name and Address", margin + 8, y);
+    // Underline
+    const textW = doc.getTextWidth("Owner's Name and Address");
+    doc.setDrawColor(80, 80, 80);
+    doc.setLineWidth(0.3);
+    doc.line(margin + 8, y + 1, margin + 8 + textW, y + 1);
+    y += 7;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.text(ownerName, margin + 8, y);
+    y += 5;
+
+    if (ownerPAN) {
+      doc.text(`PAN: ${ownerPAN}`, margin + 8, y);
+      y += 5;
+    }
+
+    if (ownerAddress) {
+      const addrLines = doc.splitTextToSize(ownerAddress, contentW / 2);
+      doc.text(addrLines, margin + 8, y);
+    }
+
+    // Revenue Stamp — centered, conditional
+    if (showRevenueStamp) {
+      const stampY = yStart + receiptH - 32;
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineWidth(0.3);
+      doc.rect(pageW / 2 - 14, stampY - 6, 28, 14, 'S');
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.text('Revenue', pageW / 2, stampY, { align: 'center' });
+      doc.text('Stamp', pageW / 2, stampY + 4, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.text('(affix if paid by cash & amount > \u20B95,000)', pageW / 2, stampY + 10, { align: 'center' });
+    }
+
+    // Signature — right aligned at bottom
+    const sigY = yStart + receiptH - 16;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.text('Signature', margin + contentW - 8, sigY, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(`(${ownerName})`, margin + contentW - 8, sigY + 6, { align: 'right' });
+  });
+
+  // Generate filename
+  const startMonthStr = monthNames[months[0].getMonth()].slice(0, 3) + months[0].getFullYear();
+  const endMonthStr = monthNames[months[months.length - 1].getMonth()].slice(0, 3) + months[months.length - 1].getFullYear();
+  const fileName = months.length === 1
+    ? `Rent_Receipt_${startMonthStr}.pdf`
+    : `Rent_Receipts_${startMonthStr}_to_${endMonthStr}.pdf`;
+
+  doc.save(fileName);
+  toast(`✅ ${months.length} rent receipt(s) generated!`, 'success');
 }
 
 // ========================================

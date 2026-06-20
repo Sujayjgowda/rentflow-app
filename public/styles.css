@@ -1953,3 +1953,149 @@ a:hover {
     font-size: 22px;
   }
 }
+
+/* ========================================
+   Rent Receipt Generator
+   ======================================== */
+.receipt-form-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.06));
+  border-radius: 16px;
+  border: 1px solid rgba(99, 102, 241, 0.12);
+}
+
+.receipt-form-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.receipt-form-header-icon .material-symbols-rounded {
+  font-size: 26px;
+  color: #fff;
+}
+
+.receipt-generator-form {
+  padding: 0;
+  overflow: hidden;
+}
+
+.receipt-form-section {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.receipt-form-section:last-of-type {
+  border-bottom: none;
+}
+
+.receipt-form-section-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.receipt-form-section-title .material-symbols-rounded {
+  font-size: 18px;
+}
+
+.receipt-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.receipt-form-row textarea {
+  padding: 12px;
+  min-height: 48px;
+  resize: vertical;
+}
+
+.receipt-pan-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 10px;
+  color: #b45309;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.receipt-pan-warning .material-symbols-rounded {
+  font-size: 20px;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.receipt-generate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 40px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #0d9488, #14b8a6);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(13, 148, 136, 0.3);
+  margin-top: 8px;
+}
+
+.receipt-generate-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(13, 148, 136, 0.4);
+  background: linear-gradient(135deg, #0f766e, #0d9488);
+}
+
+.receipt-generate-btn:active {
+  transform: translateY(0);
+}
+
+.receipt-generate-btn .material-symbols-rounded {
+  font-size: 22px;
+}
+
+@media (max-width: 768px) {
+  .receipt-form-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .receipt-form-header {
+    flex-direction: column;
+    text-align: center;
+    padding: 18px;
+  }
+
+  .receipt-form-section {
+    padding: 16px 18px;
+  }
+
+  .receipt-generate-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 20px;
+  }
+}
