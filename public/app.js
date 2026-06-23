@@ -225,6 +225,7 @@ function setupSidebar() {
 
   document.getElementById('mobile-menu-btn').onclick = () => {
     document.getElementById('sidebar').classList.toggle('open');
+    document.body.classList.toggle('sidebar-open');
   };
 }
 
@@ -234,6 +235,7 @@ function navigate(page) {
     el.classList.toggle('active', el.dataset.page === page);
   });
   document.getElementById('sidebar').classList.remove('open');
+  document.body.classList.remove('sidebar-open');
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 

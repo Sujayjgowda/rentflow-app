@@ -2,11 +2,12 @@
 // RentFlow — Service Worker
 // ========================================
 
-const CACHE_NAME = 'rentflow-v3';
+const CACHE_NAME = 'rentflow-v4';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
     '/styles.css',
+    '/rentflow-mobile.css',
     '/app.js',
     '/manifest.json',
     'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap',
