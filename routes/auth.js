@@ -12,23 +12,24 @@ router.post('/register', async (req, res) => {
     try {
         const { name, email, password, role, phone } = req.body;
 
-        if (!name || !email || !password || !role) {
-            return res.status(400).json({ error: 'Name, email, password, and role are required' });
+        if (!name || !phone || !password || !role) {
+            return res.status(400).json({ error: 'Name, phone number, password, and role are required' });
         }
 
         if (!['landlord', 'tenant'].includes(role)) {
             return res.status(400).json({ error: 'Role must be landlord or tenant' });
         }
 
-        const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
-        if (existing.rows.length > 0) {
-            return res.status(409).json({ error: 'Email already registered' });
+        const trimmedPhone = phone.trim();
+        const existingPhone = await query('SELECT id FROM users WHERE phone = $1', [trimmedPhone]);
+        if (existingPhone.rows.length > 0) {
+            return res.status(409).json({ error: 'Phone number already registered' });
         }
 
-        if (phone && phone.trim() !== '') {
-            const existingPhone = await query('SELECT id FROM users WHERE phone = $1', [phone.trim()]);
-            if (existingPhone.rows.length > 0) {
-                return res.status(409).json({ error: 'Phone number already registered' });
+        if (email && email.trim() !== '') {
+            const existingEmail = await query('SELECT id FROM users WHERE email = $1', [email.trim()]);
+            if (existingEmail.rows.length > 0) {
+                return res.status(409).json({ error: 'Email already registered' });
             }
         }
 
@@ -39,28 +40,28 @@ router.post('/register', async (req, res) => {
 
         await query(
             'INSERT INTO users (id, name, email, password_hash, role, phone, avatar_color) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-            [id, name, email, password_hash, role, phone || null, avatar_color]
+            [id, name, email ? email.trim() : null, password_hash, role, trimmedPhone, avatar_color]
         );
 
-        // If registering as tenant, auto-link any existing tenant records with this email or phone
+        // If registering as tenant, auto-link any existing tenant records with this phone or email
         if (role === 'tenant') {
             await query(`
                 UPDATE tenants 
                 SET user_id = $1 
-                WHERE (email = $2 OR (phone = $3 AND phone IS NOT NULL AND phone <> ''))
+                WHERE (phone = $2 OR (email = $3 AND email IS NOT NULL AND email <> ''))
                   AND user_id IS NULL
-            `, [id, email, phone ? phone.trim() : null]);
+            `, [id, trimmedPhone, email ? email.trim() : null]);
         }
 
         await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)',
             [id, 'register', `${name} registered as ${role}`]
         );
 
-        const token = jwt.sign({ id, name, email, role }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id, name, phone: trimmedPhone, role }, JWT_SECRET, { expiresIn: '7d' });
 
         res.status(201).json({
             token,
-            user: { id, name, email, role, phone: phone || null, avatar_color }
+            user: { id, name, email: email ? email.trim() : null, role, phone: trimmedPhone, avatar_color }
         });
     } catch (err) {
         console.error('Register error:', err);
@@ -74,23 +75,23 @@ router.post('/login', async (req, res) => {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email or Mobile and password are required' });
+            return res.status(400).json({ error: 'Phone number (or email) and password are required' });
         }
 
         const trimmedIdentifier = email.trim();
-        const result = await query('SELECT * FROM users WHERE email = $1 OR phone = $2', [trimmedIdentifier, trimmedIdentifier]);
+        const result = await query('SELECT * FROM users WHERE phone = $1 OR email = $2', [trimmedIdentifier, trimmedIdentifier]);
         const user = result.rows[0];
         if (!user) {
-            return res.status(401).json({ error: 'Invalid email or password' });
+            return res.status(401).json({ error: 'Invalid credentials' });
         }
 
         const valid = bcrypt.compareSync(password, user.password_hash);
         if (!valid) {
-            return res.status(401).json({ error: 'Invalid email or password' });
+            return res.status(401).json({ error: 'Invalid credentials' });
         }
 
         const token = jwt.sign(
-            { id: user.id, name: user.name, email: user.email, role: user.role },
+            { id: user.id, name: user.name, phone: user.phone, role: user.role },
             JWT_SECRET,
             { expiresIn: '7d' }
         );

@@ -508,9 +508,9 @@ async function renderTenants() {
       return;
     }
     area.innerHTML = `<div class="page-enter card"><div class="data-table-wrapper"><table class="data-table"><thead><tr>
-      <th>Name</th><th>Property</th><th>Email</th><th>Phone</th><th>Lease Start</th><th>Lease End</th>${currentUser.role === 'landlord' ? '<th>Actions</th>' : ''}</tr></thead><tbody>
-      ${tenants.map(t => `<tr><td style="font-weight:600">${t.name}</td><td>${t.property_name || '—'}</td><td>${t.email || '—'}</td>
-        <td>${t.phone || '—'}</td><td>${formatDate(t.lease_start)}</td><td>${formatDate(t.lease_end)}</td>
+      <th>Name</th><th>Property</th><th>Phone</th><th>Email</th><th>Lease Start</th><th>Lease End</th>${currentUser.role === 'landlord' ? '<th>Actions</th>' : ''}</tr></thead><tbody>
+      ${tenants.map(t => `<tr><td style="font-weight:600">${t.name}</td><td>${t.property_name || '—'}</td><td>${t.phone || '—'}</td>
+        <td>${t.email || '—'}</td><td>${formatDate(t.lease_start)}</td><td>${formatDate(t.lease_end)}</td>
         ${currentUser.role === 'landlord' ? `<td><div style="display:flex;gap:4px">
           <button class="property-action-btn" onclick="showEditTenantModal('${t.id}','${esc(t.name)}','${esc(t.email || '')}','${esc(t.phone || '')}','${t.lease_start || ''}','${t.lease_end || ''}')"><span class="material-symbols-rounded">edit</span></button>
           <button class="property-action-btn" onclick="deleteTenant('${t.id}')"><span class="material-symbols-rounded">delete</span></button>
@@ -530,8 +530,8 @@ async function showAddTenantModal() {
   openModal('Add Tenant', `<div class="auth-form">
     <div class="form-group no-icon"><label class="form-label">Property</label><select id="ten-prop">${propsHtml}</select></div>
     <div class="form-group"><span class="material-symbols-rounded input-icon">person</span><input type="text" id="ten-name" placeholder="Tenant name" required></div>
-    <div class="form-group"><span class="material-symbols-rounded input-icon">email</span><input type="email" id="ten-email" placeholder="Email"></div>
-    <div class="form-group"><span class="material-symbols-rounded input-icon">phone</span><input type="tel" id="ten-phone" placeholder="Phone"></div>
+    <div class="form-group"><span class="material-symbols-rounded input-icon">phone</span><input type="tel" id="ten-phone" placeholder="Phone number" required></div>
+    <div class="form-group"><span class="material-symbols-rounded input-icon">email</span><input type="email" id="ten-email" placeholder="Email (optional)"></div>
     <div class="form-row">
       <div class="form-group no-icon"><label class="form-label">Lease Start</label><input type="date" id="ten-start"></div>
       <div class="form-group no-icon"><label class="form-label">Lease End</label><input type="date" id="ten-end"></div>
@@ -543,8 +543,8 @@ async function showAddTenantModal() {
 function showEditTenantModal(id, name, email, phone, start, end) {
   openModal('Edit Tenant', `<div class="auth-form">
     <div class="form-group"><span class="material-symbols-rounded input-icon">person</span><input type="text" id="ten-name" value="${name}" required></div>
-    <div class="form-group"><span class="material-symbols-rounded input-icon">email</span><input type="email" id="ten-email" value="${email}"></div>
-    <div class="form-group"><span class="material-symbols-rounded input-icon">phone</span><input type="tel" id="ten-phone" value="${phone}"></div>
+    <div class="form-group"><span class="material-symbols-rounded input-icon">phone</span><input type="tel" id="ten-phone" value="${phone}" required></div>
+    <div class="form-group"><span class="material-symbols-rounded input-icon">email</span><input type="email" id="ten-email" value="${email}" placeholder="Email (optional)"></div>
     <div class="form-row">
       <div class="form-group no-icon"><label class="form-label">Lease Start</label><input type="date" id="ten-start" value="${start}"></div>
       <div class="form-group no-icon"><label class="form-label">Lease End</label><input type="date" id="ten-end" value="${end}"></div>
@@ -1347,7 +1347,7 @@ async function renderAdminUsers() {
       <div class="page-enter">
         <div class="filters-bar">
           <div class="form-group no-icon" style="flex: 2; margin-bottom: 0;">
-            <input type="text" class="filter-input" id="admin-search-user" oninput="applyAdminUserFilters()" placeholder="Search users by name or email..." style="width: 100%;">
+            <input type="text" class="filter-input" id="admin-search-user" oninput="applyAdminUserFilters()" placeholder="Search users by name, phone, or email..." style="width: 100%;">
           </div>
           <select class="filter-select" id="admin-filter-role" onchange="applyAdminUserFilters()">
             <option value="">All Roles</option>
@@ -1377,8 +1377,8 @@ function renderAdminUsersTable(users) {
         <thead>
           <tr>
             <th>User</th>
-            <th>Email</th>
             <th>Phone</th>
+            <th>Email</th>
             <th>Role</th>
             <th>Registered Date</th>
             <th>Actions</th>
@@ -1395,8 +1395,8 @@ function renderAdminUsersTable(users) {
                     <span style="font-weight:600">${u.name}</span>
                   </div>
                 </td>
-                <td>${u.email}</td>
-                <td>${u.phone || '—'}</td>
+                <td>${u.phone}</td>
+                <td>${u.email || '—'}</td>
                 <td>
                   <span class="status-badge ${u.role}">
                     ${u.role.toUpperCase()}
@@ -1432,7 +1432,7 @@ function applyAdminUserFilters() {
   const role = document.getElementById('admin-filter-role').value;
 
   const filtered = adminUsersList.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query);
+    const matchesSearch = u.name.toLowerCase().includes(query) || (u.phone && u.phone.includes(query)) || (u.email && u.email.toLowerCase().includes(query));
     const matchesRole = !role || u.role === role;
     return matchesSearch && matchesRole;
   });
@@ -1448,12 +1448,12 @@ function showAdminEditUserModal(userId, name, email, phone, role) {
         <input type="text" id="admin-edit-name" placeholder="Full name" value="${name}" required>
       </div>
       <div class="form-group">
-        <span class="material-symbols-rounded input-icon">email</span>
-        <input type="email" id="admin-edit-email" placeholder="Email address" value="${email}" required>
+        <span class="material-symbols-rounded input-icon">phone</span>
+        <input type="tel" id="admin-edit-phone" placeholder="Phone number" value="${phone}" required>
       </div>
       <div class="form-group">
-        <span class="material-symbols-rounded input-icon">phone</span>
-        <input type="tel" id="admin-edit-phone" placeholder="Phone number" value="${phone}">
+        <span class="material-symbols-rounded input-icon">email</span>
+        <input type="email" id="admin-edit-email" placeholder="Email address (optional)" value="${email}">
       </div>
       <div class="form-group no-icon">
         <label class="form-label">Role</label>
@@ -1478,8 +1478,8 @@ async function submitAdminEditUser(userId) {
   const role = document.getElementById('admin-edit-role').value;
   const errorEl = document.getElementById('admin-edit-error');
 
-  if (!name || !email || !role) {
-    errorEl.textContent = 'Name, email, and role are required';
+  if (!name || !phone || !role) {
+    errorEl.textContent = 'Name, phone number, and role are required';
     errorEl.classList.remove('hidden');
     return;
   }

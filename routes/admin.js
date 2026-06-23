@@ -59,8 +59,8 @@ router.put('/users/:id', authenticate, requireRole('admin'), async (req, res) =>
         const { id } = req.params;
         const { name, email, role, phone } = req.body;
 
-        if (!name || !email || !role) {
-            return res.status(400).json({ error: 'Name, email, and role are required' });
+        if (!name || !phone || !role) {
+            return res.status(400).json({ error: 'Name, phone number, and role are required' });
         }
 
         if (!['landlord', 'tenant', 'admin'].includes(role)) {
@@ -73,9 +73,9 @@ router.put('/users/:id', authenticate, requireRole('admin'), async (req, res) =>
         }
         const oldUser = userCheck.rows[0];
 
-        // If email changed, check uniqueness
-        if (email !== oldUser.email) {
-            const emailCheck = await query('SELECT id FROM users WHERE email = $1 AND id <> $2', [email, id]);
+        // If email changed, check uniqueness (only if email is provided)
+        if (email && email.trim() !== '' && email !== oldUser.email) {
+            const emailCheck = await query('SELECT id FROM users WHERE email = $1 AND id <> $2', [email.trim(), id]);
             if (emailCheck.rows.length > 0) {
                 return res.status(409).json({ error: 'Email already in use by another user' });
             }
@@ -91,7 +91,7 @@ router.put('/users/:id', authenticate, requireRole('admin'), async (req, res) =>
 
         await query(
             'UPDATE users SET name = $1, email = $2, role = $3, phone = $4 WHERE id = $5',
-            [name, email, role, phone || null, id]
+            [name, email ? email.trim() : null, role, phone.trim(), id]
         );
 
         // If role changed to tenant, auto-link existing tenant records
@@ -99,9 +99,9 @@ router.put('/users/:id', authenticate, requireRole('admin'), async (req, res) =>
             await query(`
                 UPDATE tenants 
                 SET user_id = $1 
-                WHERE (email = $2 OR (phone = $3 AND phone IS NOT NULL AND phone <> ''))
+                WHERE (phone = $2 OR (email = $3 AND email IS NOT NULL AND email <> ''))
                   AND user_id IS NULL
-            `, [id, email, phone ? phone.trim() : null]);
+            `, [id, phone.trim(), email ? email.trim() : null]);
         }
 
         await query(

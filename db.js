@@ -13,10 +13,10 @@ async function initDB() {
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
+                email TEXT,
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL CHECK(role IN ('landlord', 'tenant', 'admin')),
-                phone TEXT,
+                phone TEXT UNIQUE NOT NULL,
                 avatar_color TEXT DEFAULT '#6366f1',
                 created_at TIMESTAMP DEFAULT NOW()
             );
@@ -118,6 +118,39 @@ async function initDB() {
       console.warn('⚠️ Users role constraint migration warning:', migrationErr.message);
     }
 
+    // Migrate: make email optional and phone mandatory
+    try {
+      await client.query(`
+        ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;
+      `);
+      console.log('✅ Email column made optional');
+    } catch (migrationErr) {
+      console.warn('⚠️ Email migration warning:', migrationErr.message);
+    }
+
+    try {
+      await client.query(`
+        ALTER TABLE users ALTER COLUMN phone SET NOT NULL;
+      `);
+      console.log('✅ Phone column made mandatory');
+    } catch (migrationErr) {
+      console.warn('⚠️ Phone migration warning:', migrationErr.message);
+    }
+
+    // Add unique constraint on phone if not exists
+    try {
+      await client.query(`
+        ALTER TABLE users ADD CONSTRAINT users_phone_key UNIQUE (phone);
+      `);
+      console.log('✅ Phone unique constraint added');
+    } catch (migrationErr) {
+      // Constraint may already exist
+      if (!migrationErr.message.includes('already exists')) {
+        console.warn('⚠️ Phone unique constraint warning:', migrationErr.message);
+      }
+    }
+
     // Seed admin account if it doesn't exist
     const adminCheck = await client.query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
     if (adminCheck.rows.length === 0) {
@@ -125,13 +158,14 @@ async function initDB() {
       const { v4: uuidv4 } = require('uuid');
       const adminId = uuidv4();
       const adminEmail = process.env.ADMIN_EMAIL || 'admin@rentflow.com';
+      const adminPhone = process.env.ADMIN_PHONE || '9999999999';
       const adminPassword = process.env.ADMIN_PASSWORD || 'AdminPassword123';
       const passwordHash = bcrypt.hashSync(adminPassword, 10);
 
       await client.query(`
-        INSERT INTO users (id, name, email, password_hash, role, avatar_color)
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `, [adminId, 'RentFlow Admin', adminEmail, passwordHash, 'admin', '#4f46e5']);
+        INSERT INTO users (id, name, email, phone, password_hash, role, avatar_color)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [adminId, 'RentFlow Admin', adminEmail, adminPhone, passwordHash, 'admin', '#4f46e5']);
       console.log(`👤 Seeded default admin user: ${adminEmail}`);
     }
   } catch (err) {

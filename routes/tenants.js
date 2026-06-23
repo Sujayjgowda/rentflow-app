@@ -52,15 +52,20 @@ router.post('/', authenticate, requireRole('landlord'), async (req, res) => {
     try {
         const { property_id, name, email, phone, lease_start, lease_end } = req.body;
 
-        if (!property_id || !name) {
-            return res.status(400).json({ error: 'Property ID and tenant name are required' });
+        if (!property_id || !name || !phone) {
+            return res.status(400).json({ error: 'Property ID, tenant name, and phone number are required' });
         }
 
         const prop = await query('SELECT id FROM properties WHERE id = $1 AND owner_id = $2', [property_id, req.user.id]);
         if (prop.rows.length === 0) return res.status(404).json({ error: 'Property not found' });
 
+        // Link to existing user account by phone number first, then email
         let user_id = null;
-        if (email) {
+        if (phone) {
+            const tenantUser = await query('SELECT id FROM users WHERE phone = $1 AND role = $2', [phone.trim(), 'tenant']);
+            if (tenantUser.rows.length > 0) user_id = tenantUser.rows[0].id;
+        }
+        if (!user_id && email) {
             const tenantUser = await query('SELECT id FROM users WHERE email = $1 AND role = $2', [email, 'tenant']);
             if (tenantUser.rows.length > 0) user_id = tenantUser.rows[0].id;
         }
@@ -68,7 +73,7 @@ router.post('/', authenticate, requireRole('landlord'), async (req, res) => {
         const id = uuidv4();
         await query(
             'INSERT INTO tenants (id, property_id, user_id, name, email, phone, lease_start, lease_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-            [id, property_id, user_id, name, email || null, phone || null, lease_start || null, lease_end || null]
+            [id, property_id, user_id, name, email || null, phone.trim(), lease_start || null, lease_end || null]
         );
 
         await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)',
@@ -95,10 +100,15 @@ router.put('/:id', authenticate, requireRole('landlord'), async (req, res) => {
 
         const { name, email, phone, lease_start, lease_end, is_active } = req.body;
 
-        // Re-link user_id if email is provided
+        // Re-link user_id if phone is provided (prioritize phone for linking)
         let user_id = tenant.user_id;
+        const finalPhone = phone !== undefined ? phone : tenant.phone;
         const finalEmail = email !== undefined ? email : tenant.email;
-        if (finalEmail) {
+        if (finalPhone) {
+            const tenantUser = await query('SELECT id FROM users WHERE phone = $1 AND role = $2', [finalPhone.trim(), 'tenant']);
+            if (tenantUser.rows.length > 0) user_id = tenantUser.rows[0].id;
+        }
+        if (!user_id && finalEmail) {
             const tenantUser = await query('SELECT id FROM users WHERE email = $1 AND role = $2', [finalEmail, 'tenant']);
             if (tenantUser.rows.length > 0) user_id = tenantUser.rows[0].id;
         }
