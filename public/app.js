@@ -1201,7 +1201,7 @@ function renderAdvanceTable(advances, isLandlord) {
     return '<div class="empty-state"><span class="material-symbols-rounded">savings</span><h3>No advance payments</h3></div>';
   }
   return `<div class="data-table-wrapper"><table class="data-table"><thead><tr>
-    <th>Tenant</th><th>Property</th><th>Amount</th><th>Date Paid</th><th>Notes</th>${isLandlord ? '<th>Actions</th>' : ''}
+    <th>Tenant</th><th>Property</th><th>Amount</th><th>Date Paid</th><th>Notes</th><th>Receipt</th>${isLandlord ? '<th>Actions</th>' : ''}
   </tr></thead><tbody>
     ${advances.map(a => `<tr>
       <td style="font-weight:600">${a.tenant_name}</td>
@@ -1209,8 +1209,9 @@ function renderAdvanceTable(advances, isLandlord) {
       <td style="font-weight:700;color:var(--green-text)">${formatCurrency(a.amount)}</td>
       <td>${formatDate(a.paid_date)}</td>
       <td>${a.notes || '—'}</td>
+      <td>${a.receipt_path ? `<a class="property-action-btn" href="${a.receipt_path}" target="_blank" title="View Receipt"><span class="material-symbols-rounded">attachment</span></a>` : '—'}</td>
       ${isLandlord ? `<td><div style="display:flex;gap:4px">
-        <button class="property-action-btn" onclick="showEditAdvanceModal('${a.id}',${a.amount},'${a.paid_date}','${esc(a.notes || '')}')"><span class="material-symbols-rounded">edit</span></button>
+        <button class="property-action-btn" onclick="showEditAdvanceModal('${a.id}',${a.amount},'${a.paid_date}','${esc(a.notes || '')}','${esc(a.receipt_path || '')}')"><span class="material-symbols-rounded">edit</span></button>
         <button class="property-action-btn" onclick="deleteAdvance('${a.id}')"><span class="material-symbols-rounded">delete</span></button>
       </div></td>` : ''}
     </tr>`).join('')}
@@ -1260,6 +1261,13 @@ async function showAddAdvanceModal() {
     </div>
     <div class="form-group no-icon"><label class="form-label">Notes</label>
       <textarea id="adv-notes" style="padding:12px;min-height:60px" placeholder="Optional notes..."></textarea></div>
+    <div class="form-group no-icon"><label class="form-label">Receipt</label>
+      <div class="upload-area" onclick="document.getElementById('adv-receipt').click()">
+        <span class="material-symbols-rounded">cloud_upload</span><p>Click to upload receipt</p>
+        <div class="file-name" id="adv-receipt-filename"></div>
+      </div>
+      <input type="file" id="adv-receipt" accept=".jpg,.jpeg,.png,.pdf,.webp" style="display:none" onchange="document.getElementById('adv-receipt-filename').textContent=this.files[0]?.name||''">
+    </div>
   </div>`,
   `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
    <button class="btn btn-primary" onclick="submitAdvance()">Add Advance</button>`);
@@ -1281,21 +1289,30 @@ function filterAdvanceTenants() {
 
 async function submitAdvance() {
   try {
-    const body = {
-      property_id: document.getElementById('adv-prop').value,
-      tenant_id: document.getElementById('adv-tenant').value,
-      amount: document.getElementById('adv-amount').value,
-      paid_date: document.getElementById('adv-date').value,
-      notes: document.getElementById('adv-notes').value
-    };
-    await api('/advances', { method: 'POST', body: JSON.stringify(body) });
+    const formData = new FormData();
+    formData.append('property_id', document.getElementById('adv-prop').value);
+    formData.append('tenant_id', document.getElementById('adv-tenant').value);
+    formData.append('amount', document.getElementById('adv-amount').value);
+    formData.append('paid_date', document.getElementById('adv-date').value);
+    formData.append('notes', document.getElementById('adv-notes').value);
+    
+    const receipt = document.getElementById('adv-receipt').files[0];
+    if (receipt) formData.append('receipt', receipt);
+
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${API}/advances`, { method: 'POST', headers, body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
     toast('Advance payment recorded!', 'success');
     closeModal();
     renderAdvances();
   } catch (err) { toast(err.message, 'error'); }
 }
 
-function showEditAdvanceModal(id, amount, paidDate, notes) {
+function showEditAdvanceModal(id, amount, paidDate, notes, receiptPath) {
   openModal('Edit Advance Payment', `<div class="auth-form">
     <div class="form-row">
       <div class="form-group no-icon"><label class="form-label">Amount (₹)</label>
@@ -1305,6 +1322,13 @@ function showEditAdvanceModal(id, amount, paidDate, notes) {
     </div>
     <div class="form-group no-icon"><label class="form-label">Notes</label>
       <textarea id="edit-adv-notes" style="padding:12px;min-height:60px">${notes}</textarea></div>
+    <div class="form-group no-icon"><label class="form-label">Receipt (Upload to replace)</label>
+      <div class="upload-area" onclick="document.getElementById('edit-adv-receipt').click()">
+        <span class="material-symbols-rounded">cloud_upload</span><p>Click to replace receipt</p>
+        <div class="file-name" id="edit-adv-receipt-filename">${receiptPath ? 'Current receipt uploaded' : ''}</div>
+      </div>
+      <input type="file" id="edit-adv-receipt" accept=".jpg,.jpeg,.png,.pdf,.webp" style="display:none" onchange="document.getElementById('edit-adv-receipt-filename').textContent=this.files[0]?.name||''">
+    </div>
   </div>`,
   `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
    <button class="btn btn-primary" onclick="submitEditAdvance('${id}')">Save Changes</button>`);
@@ -1312,12 +1336,21 @@ function showEditAdvanceModal(id, amount, paidDate, notes) {
 
 async function submitEditAdvance(id) {
   try {
-    const body = {
-      amount: document.getElementById('edit-adv-amount').value,
-      paid_date: document.getElementById('edit-adv-date').value,
-      notes: document.getElementById('edit-adv-notes').value
-    };
-    await api(`/advances/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    const formData = new FormData();
+    formData.append('amount', document.getElementById('edit-adv-amount').value);
+    formData.append('paid_date', document.getElementById('edit-adv-date').value);
+    formData.append('notes', document.getElementById('edit-adv-notes').value);
+
+    const receipt = document.getElementById('edit-adv-receipt').files[0];
+    if (receipt) formData.append('receipt', receipt);
+
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${API}/advances/${id}`, { method: 'PUT', headers, body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
     toast('Advance updated!', 'success');
     closeModal();
     renderAdvances();

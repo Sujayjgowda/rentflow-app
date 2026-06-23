@@ -87,6 +87,7 @@ async function initDB() {
                 amount NUMERIC NOT NULL,
                 paid_date TEXT NOT NULL,
                 notes TEXT,
+                receipt_path TEXT,
                 created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMP DEFAULT NOW()
             );
@@ -149,6 +150,16 @@ async function initDB() {
       if (!migrationErr.message.includes('already exists')) {
         console.warn('⚠️ Phone unique constraint warning:', migrationErr.message);
       }
+    }
+
+    // Migrate: add receipt_path to advance_payments if not exists
+    try {
+      await client.query(`
+        ALTER TABLE advance_payments ADD COLUMN IF NOT EXISTS receipt_path TEXT;
+      `);
+      console.log('✅ receipt_path column verified/added to advance_payments');
+    } catch (migrationErr) {
+      console.warn('⚠️ receipt_path migration warning:', migrationErr.message);
     }
 
     // Seed admin account if it doesn't exist
