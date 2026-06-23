@@ -185,6 +185,7 @@ function setupSidebar() {
         { id: 'transactions', icon: 'receipt_long', label: 'Transactions' },
         { id: 'advances', icon: 'savings', label: 'Advance Amount' },
         { id: 'bills', icon: 'receipt', label: 'Shared Bills' },
+        { id: 'automations', icon: 'schedule', label: 'Automations' },
         { id: 'reports', icon: 'bar_chart', label: 'Reports' },
         { id: 'rent_receipts', icon: 'receipt_long', label: 'Rent Receipts' },
       ]
@@ -236,7 +237,7 @@ function navigate(page) {
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 
-  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics', agreements: 'Rent Agreements', advances: 'Advance Amount', admin_users: 'User Management', bills: 'Shared Bills', rent_receipts: 'Rent Receipt Generator' };
+  const titles = { dashboard: 'Dashboard', properties: 'Properties', tenants: 'Tenants', transactions: 'Transactions', reports: 'Reports & Analytics', agreements: 'Rent Agreements', advances: 'Advance Amount', admin_users: 'User Management', bills: 'Shared Bills', rent_receipts: 'Rent Receipt Generator', automations: 'Transaction Automations' };
   document.getElementById('page-title').textContent = titles[page] || page;
 
   const area = document.getElementById('content-area');
@@ -256,6 +257,7 @@ function navigate(page) {
     case 'admin_users': renderAdminUsers(); break;
     case 'bills': renderBills(); break;
     case 'rent_receipts': renderRentReceipts(); break;
+    case 'automations': renderAutomations(); break;
   }
 }
 
@@ -2348,6 +2350,275 @@ function generateReceiptPDF() {
 
   doc.save(fileName);
   toast(`✅ ${months.length} rent receipt(s) generated!`, 'success');
+}
+
+// ========================================
+// Transaction Automations Pages & Logic
+// ========================================
+async function renderAutomations() {
+  const area = document.getElementById('content-area');
+  const actions = document.getElementById('top-bar-actions');
+  const isLandlord = currentUser.role === 'landlord';
+
+  if (!isLandlord) {
+    area.innerHTML = `
+      <div class="empty-state">
+        <span class="material-symbols-rounded">block</span>
+        <h3>Access Denied</h3>
+        <p>Only landlords/owners can manage transaction automations.</p>
+      </div>
+    `;
+    return;
+  }
+
+  actions.innerHTML = `
+    <button class="btn btn-primary btn-sm" onclick="showAddAutomationModal()">
+      <span class="material-symbols-rounded">add_circle</span>Create Automation
+    </button>
+  `;
+
+  try {
+    const automations = await api('/automations');
+
+    if (!automations || automations.length === 0) {
+      area.innerHTML = `
+        <div class="page-enter">
+          <div class="empty-state">
+            <span class="material-symbols-rounded">schedule</span>
+            <h3>No automations scheduled</h3>
+            <p>Automatically schedule and generate monthly pending rent transactions for your tenants.</p>
+            <button class="btn btn-primary" onclick="showAddAutomationModal()">
+              <span class="material-symbols-rounded">add_circle</span>Create Your First Automation
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    area.innerHTML = `
+      <div class="page-enter">
+        <div class="card">
+          <div class="data-table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Property</th>
+                  <th>Tenant</th>
+                  <th>Monthly Amount</th>
+                  <th>Start Month</th>
+                  <th>Duration</th>
+                  <th>Day of Month</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${automations.map(aut => {
+                  const statusClass = aut.is_active === 1 ? 'paid' : 'overdue';
+                  const statusLabel = aut.is_active === 1 ? 'ACTIVE' : 'PAUSED';
+                  return `
+                    <tr>
+                      <td style="font-weight: 600">${aut.property_name}</td>
+                      <td>${aut.tenant_name}</td>
+                      <td>${formatCurrency(aut.amount)}</td>
+                      <td>${formatDate(aut.start_date)}</td>
+                      <td>${aut.num_months} months</td>
+                      <td>Day ${aut.due_day}</td>
+                      <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+                      <td>
+                        <div style="display:flex;gap:6px">
+                          <button class="btn btn-secondary btn-sm" onclick="toggleAutomation('${aut.id}', ${aut.is_active})" title="${aut.is_active === 1 ? 'Pause' : 'Resume'}">
+                            <span class="material-symbols-rounded" style="font-size:18px">${aut.is_active === 1 ? 'pause_circle' : 'play_circle'}</span>
+                          </button>
+                          <button class="btn btn-secondary btn-sm" onclick="deleteAutomation('${aut.id}')" title="Delete" style="color:var(--red)">
+                            <span class="material-symbols-rounded" style="font-size:18px">delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    area.innerHTML = `
+      <div class="empty-state">
+        <span class="material-symbols-rounded">error</span>
+        <h3>Error loading automations</h3>
+        <p>${err.message}</p>
+      </div>
+    `;
+  }
+}
+
+async function showAddAutomationModal() {
+  let props = [];
+  let tenants = [];
+  try {
+    props = await api('/properties');
+    tenants = await api('/tenants');
+  } catch (err) {
+    toast(err.message, 'error');
+    return;
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const propsHtml = props.map(p => `<option value="${p.id}" data-rent="${p.rent_amount}" data-due="${p.due_day}">${p.name}</option>`).join('');
+  
+  const bodyHTML = `
+    <div class="auth-form">
+      <div class="form-row">
+        <div class="form-group no-icon">
+          <label class="form-label">Property</label>
+          <select id="auto-property" onchange="onAutoPropertyChange()">${propsHtml}</select>
+        </div>
+        <div class="form-group no-icon">
+          <label class="form-label">Tenant</label>
+          <select id="auto-tenant"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group no-icon">
+          <label class="form-label">Monthly Amount (₹)</label>
+          <input type="number" id="auto-amount" placeholder="15000">
+        </div>
+        <div class="form-group no-icon">
+          <label class="form-label">Start Date</label>
+          <input type="date" id="auto-start" value="${today}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group no-icon">
+          <label class="form-label">Duration (Months)</label>
+          <input type="number" id="auto-months" min="1" max="120" value="12">
+        </div>
+        <div class="form-group no-icon">
+          <label class="form-label">Day of Month (1-31)</label>
+          <input type="number" id="auto-day" min="1" max="31" value="5">
+        </div>
+      </div>
+      <div class="form-group no-icon">
+        <label class="form-label">Notes</label>
+        <textarea id="auto-notes" style="padding:12px;min-height:60px" placeholder="e.g. Monthly rent or maintenance auto-charge..."></textarea>
+      </div>
+    </div>
+  `;
+
+  const footerHTML = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="submitAutomation()">Save Automation</button>
+  `;
+
+  openModal('Add Transaction Automation', bodyHTML, footerHTML);
+
+  window.allTenantsForAutomation = tenants;
+  onAutoPropertyChange();
+}
+
+window.onAutoPropertyChange = function() {
+  const propSelect = document.getElementById('auto-property');
+  const tenantSelect = document.getElementById('auto-tenant');
+  const amountInput = document.getElementById('auto-amount');
+  const dayInput = document.getElementById('auto-day');
+
+  if (!propSelect || !tenantSelect) return;
+
+  const propId = propSelect.value;
+  const tenants = window.allTenantsForAutomation || [];
+
+  const filtered = tenants.filter(t => t.property_id === propId);
+  tenantSelect.innerHTML = filtered.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  if (filtered.length === 0) {
+    tenantSelect.innerHTML = `<option value="">— No active tenants —</option>`;
+  }
+
+  const selectedOpt = propSelect.selectedOptions[0];
+  if (selectedOpt) {
+    amountInput.value = selectedOpt.dataset.rent || '';
+    dayInput.value = selectedOpt.dataset.due || '5';
+  }
+};
+
+async function submitAutomation() {
+  try {
+    const property_id = document.getElementById('auto-property').value;
+    const tenant_id = document.getElementById('auto-tenant').value;
+    const amount = document.getElementById('auto-amount').value;
+    const start_date = document.getElementById('auto-start').value;
+    const num_months = document.getElementById('auto-months').value;
+    const due_day = document.getElementById('auto-day').value;
+    const notes = document.getElementById('auto-notes').value;
+
+    if (!property_id || !tenant_id) {
+      throw new Error('Please select both property and tenant');
+    }
+    if (!amount || parseFloat(amount) <= 0) {
+      throw new Error('Please enter a valid monthly amount');
+    }
+    if (!start_date) {
+      throw new Error('Please select a start date');
+    }
+    if (!num_months || parseInt(num_months) <= 0) {
+      throw new Error('Please enter a valid duration (months)');
+    }
+    if (!due_day || parseInt(due_day) < 1 || parseInt(due_day) > 31) {
+      throw new Error('Please enter a valid day of month (1 to 31)');
+    }
+
+    const body = {
+      property_id,
+      tenant_id,
+      amount: parseFloat(amount),
+      start_date,
+      num_months: parseInt(num_months),
+      due_day: parseInt(due_day),
+      notes
+    };
+
+    const res = await api('/automations', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+
+    toast(`Automation saved successfully! Generated ${res.generated} transaction(s).`, 'success');
+    closeModal();
+    renderAutomations();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function toggleAutomation(id, currentStatus) {
+  try {
+    const newStatus = currentStatus === 1 ? 0 : 1;
+    await api(`/automations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_active: newStatus })
+    });
+    toast(`Automation ${newStatus === 1 ? 'resumed' : 'paused'}`, 'success');
+    renderAutomations();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function deleteAutomation(id) {
+  if (!confirm('Are you sure you want to delete this automation rule? This will stop future automatic transaction creation.')) return;
+  try {
+    await api(`/automations/${id}`, {
+      method: 'DELETE'
+    });
+    toast('Automation rule deleted', 'success');
+    renderAutomations();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 // ========================================

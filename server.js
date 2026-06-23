@@ -35,6 +35,7 @@ app.use('/api/agreements', require('./routes/agreements'));
 app.use('/api/advances', require('./routes/advances'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/bills', require('./routes/bills'));
+app.use('/api/automations', require('./routes/automations').router);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -101,16 +102,46 @@ async function generateMonthlyTransactions() {
     }
 }
 
+// ========================================
+// Execute automated rent transaction rules
+// ========================================
+async function runActiveAutomations() {
+    console.log('⏰ Running scheduled transaction automations...');
+    try {
+        const { executeAutomationForRule } = require('./routes/automations');
+        
+        // Fetch all active automations
+        const activeRules = await query('SELECT * FROM transaction_automations WHERE is_active = 1');
+        console.log(`📋 Found ${activeRules.rows.length} active automation rule(s).`);
+
+        let totalCreated = 0;
+        for (const rule of activeRules.rows) {
+            const res = await executeAutomationForRule(rule);
+            totalCreated += res.createdCount;
+        }
+        console.log(`📋 Automations executed: generated ${totalCreated} new transaction(s).`);
+    } catch (err) {
+        console.error('❌ Error executing transaction automations:', err.message);
+    }
+}
+
 // Initialize database then start server
 initDB().then(() => {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`\n🏠 RentFlow running at http://localhost:${PORT}`);
         console.log(`🗄️  Connected to PostgreSQL (Neon)\n`);
+        
+        // Execute automations immediately on startup
+        runActiveAutomations();
     });
 
     // Schedule: 00:01 on the 5th of every month
     cron.schedule('1 0 5 * *', generateMonthlyTransactions, { timezone: 'Asia/Kolkata' });
     console.log('📅 Cron scheduled: auto-generate transactions on 5th of every month');
+
+    // Schedule: 00:05 daily to execute automated transaction rules
+    cron.schedule('5 0 * * *', runActiveAutomations, { timezone: 'Asia/Kolkata' });
+    console.log('📅 Cron scheduled: run transaction automations daily at 00:05');
 }).catch(err => {
     console.error('Failed to initialize database:', err);
     process.exit(1);

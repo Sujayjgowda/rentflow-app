@@ -105,6 +105,20 @@ async function initDB() {
                 created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMP DEFAULT NOW()
             );
+
+            CREATE TABLE IF NOT EXISTS transaction_automations (
+                id TEXT PRIMARY KEY,
+                property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+                tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                amount NUMERIC NOT NULL,
+                start_date TEXT NOT NULL,
+                num_months INTEGER NOT NULL,
+                due_day INTEGER NOT NULL,
+                notes TEXT,
+                is_active INTEGER DEFAULT 1,
+                created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
         `);
     console.log('✅ Database tables initialized');
 
