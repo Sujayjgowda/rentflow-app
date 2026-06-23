@@ -36,7 +36,7 @@
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
@@ -49,16 +49,8 @@
     </div>
     <div class="auth-container">
       <div class="auth-brand">
-        <div class="brand-logo-svg">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#3b82f6" />
-                <stop offset="100%" stop-color="#8b5cf6" />
-              </linearGradient>
-            </defs>
-            <path d="M4 4H12C16.4183 4 20 7.58172 20 12C20 14.8927 18.4619 17.426 16.1425 18.818L20 24H15L11.5 19H8V24H4V4ZM8 8V15H12C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9H8Z" fill="url(#logo-grad)"/>
-          </svg>
+        <div class="brand-icon">
+          <span class="material-symbols-rounded">apartment</span>
         </div>
         <h1>RentFlow</h1>
         <p>Smart Rent Management</p>
@@ -132,25 +124,11 @@
 
   <!-- Main App Shell -->
   <div id="app-shell" class="app-shell hidden">
-    <!-- App background shape overlays -->
-    <div class="app-bg-shapes">
-      <div class="shape shape-1"></div>
-      <div class="shape shape-2"></div>
-      <div class="shape shape-3"></div>
-    </div>
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <div class="brand-logo-svg small">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="logo-grad-small" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#3b82f6" />
-                <stop offset="100%" stop-color="#8b5cf6" />
-              </linearGradient>
-            </defs>
-            <path d="M4 4H12C16.4183 4 20 7.58172 20 12C20 14.8927 18.4619 17.426 16.1425 18.818L20 24H15L11.5 19H8V24H4V4ZM8 8V15H12C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9H8Z" fill="url(#logo-grad-small)"/>
-          </svg>
+        <div class="brand-icon small">
+          <span class="material-symbols-rounded">apartment</span>
         </div>
         <span class="brand-name">RentFlow</span>
         <button class="sidebar-toggle" id="sidebar-toggle">
@@ -161,6 +139,10 @@
       <nav class="sidebar-nav" id="sidebar-nav">
         <!-- Navigation items injected by JS based on role -->
       </nav>
+
+      <div class="sidebar-user" id="sidebar-user">
+        <!-- User info injected by JS -->
+      </div>
     </aside>
 
     <!-- Main Content -->
@@ -170,23 +152,7 @@
           <span class="material-symbols-rounded">menu</span>
         </button>
         <div class="top-bar-title" id="page-title">Dashboard</div>
-        
-        <!-- Search bar in header center, as seen in Concept 1 mockup -->
-        <div class="top-bar-search">
-          <span class="material-symbols-rounded">search</span>
-          <input type="text" placeholder="Search properties, tenants, invoices...">
-        </div>
-
         <div class="top-bar-actions" id="top-bar-actions"></div>
-
-        <!-- Notification Bell widget -->
-        <button class="notification-btn" title="Notifications">
-          <span class="material-symbols-rounded">notifications</span>
-          <span class="notification-badge">1</span>
-        </button>
-
-        <!-- User profile in header right, as seen in Concept 1 mockup -->
-        <div class="top-bar-user" id="top-bar-user"></div>
       </header>
       <div class="content-area" id="content-area">
         <!-- Dynamic content rendered here -->

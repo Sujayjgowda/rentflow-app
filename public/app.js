@@ -215,24 +215,12 @@ function setupSidebar() {
     </div>
   `).join('');
 
-  const user = document.getElementById('top-bar-user');
-  if (user) {
-    const initials = currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-    user.innerHTML = `
-      <div class="top-bar-profile">
-        <div class="user-avatar-wrapper">
-          <div class="user-avatar" style="background:${currentUser.avatar_color}">${initials}</div>
-          <span class="status-dot"></span>
-        </div>
-        <div class="user-details">
-          <div class="user-name">${currentUser.name}</div>
-          <div class="user-status">${currentUser.role === 'landlord' ? 'Landlord' : currentUser.role === 'tenant' ? 'Tenant' : 'Admin'}</div>
-        </div>
-        <button class="logout-btn" onclick="logout()" title="Logout">
-          <span class="material-symbols-rounded">logout</span>
-        </button>
-      </div>`;
-  }
+  const user = document.getElementById('sidebar-user');
+  const initials = currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  user.innerHTML = `
+    <div class="user-avatar" style="background:${currentUser.avatar_color}">${initials}</div>
+    <div class="user-info"><div class="user-name">${currentUser.name}</div><div class="user-role">${currentUser.role}</div></div>
+    <button class="logout-btn" onclick="logout()" title="Logout"><span class="material-symbols-rounded">logout</span></button>`;
 
   document.getElementById('mobile-menu-btn').onclick = () => {
     document.getElementById('sidebar').classList.toggle('open');
