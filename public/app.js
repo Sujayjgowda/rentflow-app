@@ -550,7 +550,7 @@ async function renderDashboard() {
         </div>
 
         <!-- Stats Row -->
-        <div class="stats-row">
+        <div class="stats-grid">
           <div class="stat-card accent">
             <div class="stat-icon amber">🏦</div>
             <div class="stat-label">Total Rent Collected</div>

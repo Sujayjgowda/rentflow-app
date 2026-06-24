@@ -802,7 +802,7 @@ a:hover {
 }
 
 /* Stats Grid */
-.stats-grid {
+.stats-grid, .stats-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;

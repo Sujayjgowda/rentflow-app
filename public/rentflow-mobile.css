@@ -98,7 +98,7 @@
    4. STATS GRID — 2-col on tablet, 1-col on small phone
    ============================================================ */
 @media (max-width: 768px) {
-  .stats-grid {
+  .stats-grid, .stats-row {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
     margin-bottom: 16px;
@@ -110,7 +110,7 @@
 }
 
 @media (max-width: 400px) {
-  .stats-grid {
+  .stats-grid, .stats-row {
     grid-template-columns: 1fr;
   }
 }
