@@ -299,7 +299,19 @@ async function renderDashboard() {
     const data = await api(endpoint);
 
     if (currentUser.role === 'landlord') {
+      const now = new Date();
+      const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
+      const hour = now.getHours();
+      const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+      const firstName = currentUser.name.split(' ')[0];
       area.innerHTML = `<div class="page-enter">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <h1 style="font-family:'Lora',serif;font-size:1.55rem;font-weight:700;color:var(--text-primary);line-height:1.2;margin-bottom:4px;">${greeting}, ${firstName} 👋</h1>
+            <p style="font-size:0.875rem;color:var(--text-secondary);">Here's your portfolio overview for ${monthName}</p>
+          </div>
+          <div style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#fef3c7;border:1px solid #fcd34d;border-radius:20px;font-size:0.8rem;font-weight:500;color:#92400e;">🌾 Rent Collection Month</div>
+        </div>
         <div class="stats-grid">
           <div class="stat-card accent"><div class="stat-icon"><span class="material-symbols-rounded">domain</span></div>
             <div class="stat-value">${data.stats.propertyCount}</div><div class="stat-label">Properties</div></div>

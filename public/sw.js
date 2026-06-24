@@ -2,7 +2,7 @@
 // RentFlow — Service Worker
 // ========================================
 
-const CACHE_NAME = 'rentflow-v4';
+const CACHE_NAME = 'rentflow-v5';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
