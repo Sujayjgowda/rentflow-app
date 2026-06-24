@@ -156,14 +156,31 @@ async function showApp() {
 
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
-  setupSidebar();
+  await setupSidebar();
   navigate(currentUser.role === 'admin' ? 'admin_users' : 'dashboard');
 }
 
-function setupSidebar() {
+async function setupSidebar() {
   const nav = document.getElementById('sidebar-nav');
   const isLandlord = currentUser.role === 'landlord';
   const isAdmin = currentUser.role === 'admin';
+
+  let propertyCount = 0;
+  let transactionCount = 0;
+
+  if (isLandlord) {
+    try {
+      const [props, dash, txs] = await Promise.all([
+        api('/properties').catch(() => []),
+        api('/dashboard/landlord').catch(() => null),
+        api('/transactions').catch(() => ({ transactions: [] }))
+      ]);
+      propertyCount = props ? props.length : 0;
+      transactionCount = (txs && txs.transactions) ? txs.transactions.length : 0;
+    } catch (err) {
+      console.warn('Failed to load sidebar badge counts:', err);
+    }
+  }
 
   const items = isAdmin ? [
     {
@@ -174,54 +191,70 @@ function setupSidebar() {
   ] : isLandlord ? [
     {
       section: 'Main', items: [
-        { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
-        { id: 'properties', icon: 'domain', label: 'Properties' },
-        { id: 'tenants', icon: 'group', label: 'Tenants' },
-        { id: 'agreements', icon: 'description', label: 'Agreements' },
+        { id: 'dashboard', icon: '⊞', label: 'Dashboard' },
+        { id: 'properties', icon: '🏠', label: 'Properties', badge: propertyCount },
+        { id: 'tenants', icon: '👤', label: 'Tenants' },
+        { id: 'transactions', icon: '₹', label: 'Transactions', badge: transactionCount },
       ]
     },
     {
-      section: 'Finance', items: [
-        { id: 'transactions', icon: 'receipt_long', label: 'Transactions' },
-        { id: 'advances', icon: 'savings', label: 'Advance Amount' },
-        { id: 'bills', icon: 'receipt', label: 'Shared Bills' },
-        { id: 'automations', icon: 'schedule', label: 'Automations' },
-        { id: 'reports', icon: 'bar_chart', label: 'Reports' },
-        { id: 'rent_receipts', icon: 'receipt_long', label: 'Rent Receipts' },
+      section: 'Management', items: [
+        { id: 'agreements', icon: '📋', label: 'Agreements' },
+        { id: 'rent_receipts', icon: '📄', label: 'Rent Receipts' },
+        { id: 'bills', icon: '💡', label: 'Shared Bills' },
+        { id: 'advances', icon: '💰', label: 'Advance Amount' },
+      ]
+    },
+    {
+      section: 'Insights', items: [
+        { id: 'reports', icon: '📊', label: 'Reports' },
+        { id: 'automations', icon: '⚡', label: 'Automations' },
       ]
     }
   ] : [
     {
       section: 'Main', items: [
-        { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
-        { id: 'agreements', icon: 'description', label: 'Agreements' },
-        { id: 'transactions', icon: 'receipt_long', label: 'My Payments' },
-        { id: 'advances', icon: 'savings', label: 'Advance Amount' },
-        { id: 'bills', icon: 'receipt', label: 'Shared Bills' },
-        { id: 'reports', icon: 'bar_chart', label: 'Reports' },
-        { id: 'rent_receipts', icon: 'receipt_long', label: 'Rent Receipts' },
+        { id: 'dashboard', icon: '⊞', label: 'Dashboard' },
+        { id: 'agreements', icon: '📋', label: 'Agreements' },
+        { id: 'transactions', icon: '₹', label: 'My Payments' },
+        { id: 'advances', icon: '💰', label: 'Advance Amount' },
+        { id: 'bills', icon: '💡', label: 'Shared Bills' },
+        { id: 'reports', icon: '📊', label: 'Reports' },
+        { id: 'rent_receipts', icon: '📄', label: 'Rent Receipts' },
       ]
     }
   ];
 
   nav.innerHTML = items.map(section => `
     <div class="nav-section">
-      <div class="nav-section-title">${section.section}</div>
-      ${section.items.map(item => `
-        <button class="nav-item" data-page="${item.id}" onclick="navigate('${item.id}')">
-          <span class="material-symbols-rounded">${item.icon}</span>
-          <span>${item.label}</span>
-        </button>
-      `).join('')}
+      <div class="sidebar-section-label">${section.section}</div>
+      ${section.items.map(item => {
+        const isMaterial = item.icon.length > 2;
+        const iconHtml = isMaterial 
+          ? `<span class="material-symbols-rounded">${item.icon}</span>` 
+          : `<span class="nav-icon">${item.icon}</span>`;
+        return `
+          <button class="nav-item ${item.id === currentPage ? 'active' : ''}" data-page="${item.id}" onclick="navigate('${item.id}')">
+            ${iconHtml}
+            <span>${item.label}</span>
+            ${item.badge ? `<span class="nav-badge">${item.badge}</span>` : ''}
+          </button>
+        `;
+      }).join('')}
     </div>
   `).join('');
 
   const user = document.getElementById('sidebar-user');
-  const initials = currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  const initials = (currentUser.name || 'U').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase();
   user.innerHTML = `
-    <div class="user-avatar" style="background:${currentUser.avatar_color}">${initials}</div>
-    <div class="user-info"><div class="user-name">${currentUser.name}</div><div class="user-role">${currentUser.role}</div></div>
-    <button class="logout-btn" onclick="logout()" title="Logout"><span class="material-symbols-rounded">logout</span></button>`;
+    <div class="user-chip" onclick="logout()" title="Click to logout" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius); background: rgba(255,255,255,0.05); cursor: pointer; transition: var(--transition); width: 100%;">
+      <div class="user-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--text-primary); flex-shrink: 0;">${initials}</div>
+      <div style="flex: 1; min-width: 0;">
+        <div class="user-name" style="font-size: 0.82rem; font-weight: 500; color: rgba(255,255,255,0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${currentUser.name}</div>
+        <div class="user-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.35); text-transform: capitalize;">${currentUser.role}</div>
+      </div>
+      <span class="material-symbols-rounded" style="color: rgba(255,255,255,0.25); font-size: 1.1rem; flex-shrink: 0;">logout</span>
+    </div>`;
 
   document.getElementById('mobile-menu-btn').onclick = () => {
     document.getElementById('sidebar').classList.toggle('open');
@@ -304,32 +337,369 @@ async function renderDashboard() {
       const hour = now.getHours();
       const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
       const firstName = currentUser.name.split(' ')[0];
-      area.innerHTML = `<div class="page-enter">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
-          <div>
-            <h1 style="font-family:'Lora',serif;font-size:1.55rem;font-weight:700;color:var(--text-primary);line-height:1.2;margin-bottom:4px;">${greeting}, ${firstName} 👋</h1>
-            <p style="font-size:0.875rem;color:var(--text-secondary);">Here's your portfolio overview for ${monthName}</p>
+
+      // 1. Calculate historical 6 months summary for the custom bar chart
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const last6Months = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        last6Months.push({
+          year: d.getFullYear(),
+          month: d.getMonth() + 1,
+          label: monthNames[d.getMonth()],
+          paid: 0,
+          pending: 0
+        });
+      }
+
+      try {
+        const summaryData = await api(`/transactions/summary?year=${now.getFullYear()}`);
+        if (summaryData && summaryData.monthly) {
+          summaryData.monthly.forEach(m => {
+            const match = last6Months.find(l => l.year === now.getFullYear() && l.month === m.label_id);
+            if (match) {
+              match.paid = parseFloat(m.paid_amount || 0);
+              match.pending = parseFloat(m.pending_amount || 0);
+            }
+          });
+        }
+        const prevYear = now.getFullYear() - 1;
+        const needsPrevYear = last6Months.some(l => l.year === prevYear);
+        if (needsPrevYear) {
+          const prevSummary = await api(`/transactions/summary?year=${prevYear}`);
+          if (prevSummary && prevSummary.monthly) {
+            prevSummary.monthly.forEach(m => {
+              const match = last6Months.find(l => l.year === prevYear && l.month === m.label_id);
+              if (match) {
+                match.paid = parseFloat(m.paid_amount || 0);
+                match.pending = parseFloat(m.pending_amount || 0);
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load chart data:', e);
+      }
+
+      const maxVal = Math.max(...last6Months.map(m => m.paid + m.pending), 10000);
+      const chartBarsHtml = last6Months.map(m => {
+        const paidHeight = Math.max(4, Math.round((m.paid / maxVal) * 140));
+        const pendingHeight = Math.max(4, Math.round((m.pending / maxVal) * 140));
+        const isCurrentMonth = m.month === (now.getMonth() + 1) && m.year === now.getFullYear();
+        return `
+          <div class="bar-group">
+            <div class="bar-pair">
+              <div class="bar collected" style="height:${paidHeight}px; ${isCurrentMonth ? 'background:var(--accent-dark)' : ''}" title="Paid: ${formatCurrency(m.paid)}"></div>
+              <div class="bar pending" style="height:${pendingHeight}px; ${isCurrentMonth ? 'border-color:var(--accent)' : ''}" title="Pending: ${formatCurrency(m.pending)}"></div>
+            </div>
+            <div class="bar-label" ${isCurrentMonth ? 'style="color:var(--accent-dark);font-weight:600"' : ''}>${m.label}</div>
           </div>
-          <div style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#fef3c7;border:1px solid #fcd34d;border-radius:20px;font-size:0.8rem;font-weight:500;color:#92400e;">🌾 Rent Collection Month</div>
+        `;
+      }).join('');
+
+      // 2. Fetch properties list
+      let propertiesList = [];
+      try {
+        propertiesList = await api('/properties');
+      } catch (e) {
+        console.warn('Failed to fetch properties for dashboard:', e);
+      }
+      const topPropertiesHtml = propertiesList.slice(0, 2).map((p, idx) => {
+        const rentAmount = parseFloat(p.rent_amount) || 0;
+        const icon = p.property_type === 'apartment' ? '🏢' : '🏠';
+        const bg = idx === 0 ? 'linear-gradient(135deg,#fef3c7,#fde68a)' : 'linear-gradient(135deg,#dcfce7,#bbf7d0)';
+        return `
+          <div class="prop-card" onclick="navigate('properties')">
+            <div class="prop-thumb" style="background:${bg};">
+              <div class="prop-thumb-label">${icon}</div>
+            </div>
+            <div class="prop-info">
+              <div class="prop-name">${p.name}</div>
+              <div class="prop-addr" title="${p.address || ''}">${p.address || 'Bengaluru, India'}</div>
+              <div class="prop-meta">
+                <div><div class="prop-rent">${formatCurrency(rentAmount)}</div><div class="prop-rent-label">per month</div></div>
+                <div style="display:flex;align-items:center"><div class="prop-status-dot"></div><span class="prop-status-text">Occupied</span></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      const propertiesBlockHtml = topPropertiesHtml || `
+        <div class="empty-state" style="padding: 20px;">
+          <span class="material-symbols-rounded">home</span>
+          <p>No properties added yet</p>
         </div>
-        <div class="stats-grid">
-          <div class="stat-card accent"><div class="stat-icon"><span class="material-symbols-rounded">domain</span></div>
-            <div class="stat-value">${data.stats.propertyCount}</div><div class="stat-label">Properties</div></div>
-          <div class="stat-card green"><div class="stat-icon"><span class="material-symbols-rounded">group</span></div>
-            <div class="stat-value">${data.stats.tenantCount}</div><div class="stat-label">Active Tenants</div></div>
-          <div class="stat-card amber"><div class="stat-icon"><span class="material-symbols-rounded">account_balance_wallet</span></div>
-            <div class="stat-value">${formatCurrency(data.stats.monthlyIncome)}</div><div class="stat-label">This Month</div></div>
-          <div class="stat-card red"><div class="stat-icon"><span class="material-symbols-rounded">warning</span></div>
-            <div class="stat-value">${data.stats.overdueCount}</div><div class="stat-label">Overdue</div></div>
+      `;
+
+      // 3. Fetch tenants status list
+      let tenantsList = [];
+      try {
+        tenantsList = await api('/tenants');
+      } catch (e) {
+        console.warn('Failed to fetch tenants for dashboard:', e);
+      }
+      const tenantRowsHtml = tenantsList.slice(0, 5).map(t => {
+        const activeDue = (data.upcomingDues || []).find(d => d.tenant_id === t.id);
+        const initials = t.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+        let status = 'paid';
+        let amount = t.rent_amount || 0;
+        let statusLabel = 'Paid';
+        let avatarBg = '#dcfce7';
+        let avatarColor = '#166534';
+        let borderColor = '#86efac';
+
+        if (activeDue) {
+          status = activeDue.status;
+          amount = activeDue.amount;
+          if (status === 'overdue') {
+            statusLabel = 'Overdue';
+            avatarBg = '#fee2e2';
+            avatarColor = '#991b1b';
+            borderColor = '#fca5a5';
+          } else {
+            statusLabel = 'Pending';
+            avatarBg = '#fef3c7';
+            avatarColor = '#92400e';
+            borderColor = '#fde68a';
+          }
+        }
+        return `
+          <div class="tenant-row" onclick="navigate('tenants')">
+            <div class="tenant-avatar" style="background:${avatarBg}; color:${avatarColor}; border-color:${borderColor};">${initials}</div>
+            <div>
+              <div class="tenant-name">${t.name}</div>
+              <div class="tenant-unit">${t.property_name || 'Apartment'}</div>
+            </div>
+            <div style="margin-left:auto;text-align:right">
+              <div class="tenant-amount">${formatCurrency(amount)}</div>
+              <span class="status-pill ${status}">${statusLabel}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+      const tenantBlockHtml = tenantRowsHtml || `
+        <div class="empty-state" style="padding: 20px;">
+          <span class="material-symbols-rounded">group</span>
+          <p>No tenants registered yet</p>
         </div>
-        <div class="content-grid">
-          <div class="card"><div class="card-header"><span class="card-title">Upcoming Dues</span></div>
-            <div id="upcoming-dues">${renderDuesList(data.upcomingDues)}</div></div>
-          <div class="card"><div class="card-header"><span class="card-title">Recent Activity</span></div>
-            <div class="activity-list">${renderActivityList(data.recentActivity)}</div></div>
+      `;
+
+      // 4. Occupancy Rate Donut
+      const totalProps = parseInt(data.stats.propertyCount) || 0;
+      const occupiedProps = parseInt(data.stats.tenantCount) || 0;
+      const vacantProps = Math.max(0, totalProps - occupiedProps);
+      const occupancyRate = totalProps > 0 ? Math.round((occupiedProps / totalProps) * 100) : 0;
+      const strokeDasharray = 238.76;
+      const strokeDashoffset = strokeDasharray * (1 - occupancyRate / 100);
+
+      // 5. Recent Activity
+      const activityItemsHtml = (data.recentActivity || []).slice(0, 3).map((act, idx, arr) => {
+        let dotColor = 'var(--text-muted)';
+        const action = act.action || '';
+        const details = act.details || '';
+        if (action.includes('pay') || action.includes('receipt') || details.toLowerCase().includes('paid') || details.toLowerCase().includes('received')) {
+          dotColor = 'var(--green)';
+        } else if (action.includes('reminder') || action.includes('warning') || action.includes('delete') || action.includes('pause')) {
+          dotColor = 'var(--red)';
+        } else if (action.includes('automation') || action.includes('update')) {
+          dotColor = 'var(--amber)';
+        } else if (action.includes('upload') || action.includes('agreement') || action.includes('create') || action.includes('add')) {
+          dotColor = 'var(--blue)';
+        }
+        const showLine = idx < arr.length - 1;
+        return `
+          <div class="activity-item" style="border-bottom: ${showLine ? '1px solid var(--cream-deep)' : 'none'}">
+            <div class="activity-dot-wrap">
+              <div class="activity-dot" style="background:${dotColor}"></div>
+              ${showLine ? '<div class="activity-line"></div>' : ''}
+            </div>
+            <div class="activity-body">
+              <div class="activity-text">${details}</div>
+              <div class="activity-time">${timeAgo(act.created_at)}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      const activityBlockHtml = activityItemsHtml || `
+        <div class="empty-state" style="padding: 20px;">
+          <span class="material-symbols-rounded">history</span>
+          <p>No recent activity logs</p>
         </div>
-        <div class="card"><div class="card-header"><span class="card-title">Recent Transactions</span></div>
-          ${renderTransactionsTable(data.recentTransactions)}</div>
+      `;
+
+      // 6. Topbar actions
+      const dateStr = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      const actions = document.getElementById('top-bar-actions');
+      actions.innerHTML = `
+        <span class="topbar-date">📅 ${dateStr}</span>
+        <button class="btn btn-primary btn-sm" onclick="showAddPropertyModal()">
+          <span class="material-symbols-rounded">add</span>Add Property
+        </button>
+      `;
+
+      const totalPendingAmt = (data.upcomingDues || []).reduce((acc, curr) => acc + parseFloat(curr.amount || 0), 0);
+
+      // Render dashboard HTML content area
+      area.innerHTML = `<div class="page-enter">
+        <div class="greeting">
+          <div class="greeting-text">
+            <h1>${greeting}, ${firstName} 👋</h1>
+            <p>Here's your portfolio overview for ${monthName}</p>
+          </div>
+          <div class="month-chip">🌾 Rent Collection Month</div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-row">
+          <div class="stat-card accent">
+            <div class="stat-icon amber">🏦</div>
+            <div class="stat-label">Total Rent Collected</div>
+            <div class="stat-value">${formatCurrency(data.stats.monthlyIncome)}</div>
+            <span class="stat-change up">Collected this month</span>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-icon green">🏠</div>
+            <div class="stat-label">Properties</div>
+            <div class="stat-value">${data.stats.propertyCount}</div>
+            <span class="stat-change neu">${occupiedProps} occupied · ${vacantProps} vacant</span>
+          </div>
+          <div class="stat-card red">
+            <div class="stat-icon red">⚠️</div>
+            <div class="stat-label">Pending Dues</div>
+            <div class="stat-value">${formatCurrency(totalPendingAmt)}</div>
+            <span class="stat-change down">▼ ${data.stats.overdueCount} tenants overdue</span>
+          </div>
+          <div class="stat-card blue">
+            <div class="stat-icon blue">👥</div>
+            <div class="stat-label">Active Tenants</div>
+            <div class="stat-value">${data.stats.tenantCount}</div>
+            <span class="stat-change up">▲ active in portfolio</span>
+          </div>
+        </div>
+
+        <!-- Main Grid: Bar Chart + Tenant Status -->
+        <div class="main-grid">
+          <!-- Bar Chart -->
+          <div class="card">
+            <div class="card-head">
+              <div style="flex: 1;">
+                <div class="card-title">Rent Collection — Last 6 Months</div>
+                <div class="card-subtitle">Collected vs Pending</div>
+              </div>
+              <button class="card-action" onclick="navigate('reports')">View Report →</button>
+            </div>
+            <div class="chart-area">
+              <div class="chart-legend">
+                <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Collected</div>
+                <div class="legend-item"><div class="legend-dot" style="background:var(--border-light)"></div> Pending</div>
+              </div>
+              <div class="bars-wrap">
+                ${chartBarsHtml}
+              </div>
+            </div>
+          </div>
+
+          <!-- Tenant Status List -->
+          <div class="card">
+            <div class="card-head">
+              <div style="flex: 1;">
+                <div class="card-title">Tenant Status</div>
+                <div class="card-subtitle">This month's collection</div>
+              </div>
+              <button class="card-action" onclick="navigate('tenants')">All →</button>
+            </div>
+            <div class="tenant-list">
+              ${tenantBlockHtml}
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Row: Properties + Quick Actions + Donut Chart & Activity -->
+        <div class="bottom-row">
+          <!-- Top Properties -->
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title" style="flex: 1;">Top Properties</div>
+              <button class="card-action" onclick="navigate('properties')">Manage →</button>
+            </div>
+            <div style="padding:14px; display:flex; flex-direction:column; gap:10px;">
+              ${propertiesBlockHtml}
+            </div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title" style="flex: 1;">Quick Actions</div>
+            </div>
+            <div class="actions-grid">
+              <div class="action-tile" onclick="navigate('rent_receipts')">
+                <span class="action-tile-icon">📄</span>
+                <span class="action-tile-label">Generate Receipt</span>
+              </div>
+              <div class="action-tile" onclick="navigate('tenants'); showAddTenantModal();">
+                <span class="action-tile-icon">➕</span>
+                <span class="action-tile-label">Add Tenant</span>
+              </div>
+              <div class="action-tile" onclick="navigate('transactions'); showAddTransactionModal();">
+                <span class="action-tile-icon">💳</span>
+                <span class="action-tile-label">Record Payment</span>
+              </div>
+              <div class="action-tile" onclick="navigate('agreements'); showUploadAgreementModal();">
+                <span class="action-tile-icon">📋</span>
+                <span class="action-tile-label">New Agreement</span>
+              </div>
+              <div class="action-tile" onclick="navigate('bills'); showAddBillModal();">
+                <span class="action-tile-icon">💡</span>
+                <span class="action-tile-label">Add Bill</span>
+              </div>
+              <div class="action-tile" onclick="navigate('reports')">
+                <span class="action-tile-icon">📊</span>
+                <span class="action-tile-label">View Report</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Donut Occupancy + Recent Activity -->
+          <div style="display:flex; flex-direction:column; gap:20px;">
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title" style="flex: 1;">Occupancy Rate</div>
+              </div>
+              <div class="donut-wrap">
+                <svg class="donut-svg" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="38" fill="none" stroke="#e8dfd0" stroke-width="10"/>
+                  <circle cx="50" cy="50" r="38" fill="none" stroke="#d97706" stroke-width="10"
+                    stroke-dasharray="${strokeDasharray}" stroke-dashoffset="${strokeDashoffset}"
+                    stroke-linecap="round"
+                    transform="rotate(-90 50 50)"/>
+                  <text x="50" y="47" text-anchor="middle" font-family="Lora,serif" font-size="16" font-weight="700" fill="#1c1917">${occupancyRate}%</text>
+                  <text x="50" y="60" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="7" fill="#78716c">Occupied</text>
+                </svg>
+                <div class="donut-stats">
+                  <div class="donut-stat">
+                    <div class="donut-stat-val" style="color:var(--green)">${occupiedProps}</div>
+                    <div class="donut-stat-label">Occupied</div>
+                  </div>
+                  <div class="donut-stat">
+                    <div class="donut-stat-val" style="color:var(--red)">${vacantProps}</div>
+                    <div class="donut-stat-label">Vacant</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title" style="flex: 1;">Recent Activity</div>
+              </div>
+              <div class="activity-list">
+                ${activityBlockHtml}
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>`;
     } else {
       // Build pending rent alert banner
@@ -363,11 +733,11 @@ async function renderDashboard() {
       area.innerHTML = `<div class="page-enter">
         ${pendingBanner}
         <div class="stats-grid">
-          <div class="stat-card green"><div class="stat-icon"><span class="material-symbols-rounded">payments</span></div>
+          <div class="stat-card green"><div class="stat-icon green">🏦</div>
             <div class="stat-value">${formatCurrency(data.stats.totalPaid)}</div><div class="stat-label">Total Paid</div></div>
-          <div class="stat-card red"><div class="stat-icon"><span class="material-symbols-rounded">pending_actions</span></div>
+          <div class="stat-card red"><div class="stat-icon red">⚠️</div>
             <div class="stat-value">${formatCurrency(data.stats.pendingAmount)}</div><div class="stat-label">Pending</div></div>
-          <div class="stat-card accent"><div class="stat-icon"><span class="material-symbols-rounded">home</span></div>
+          <div class="stat-card accent"><div class="stat-icon amber">🏠</div>
             <div class="stat-value">${data.stats.activeLeaseCount}</div><div class="stat-label">Active Leases</div></div>
         </div>
         <div class="content-grid">
@@ -892,13 +1262,13 @@ async function renderReports(selectedYear = reportSelectedYear, selectedProperty
       </div>
 
       <div class="stats-grid">
-        <div class="stat-card green"><div class="stat-icon"><span class="material-symbols-rounded">trending_up</span></div>
+        <div class="stat-card green"><div class="stat-icon green">📈</div>
           <div class="stat-value">${formatCurrency(data.annual?.total_paid || 0)}</div><div class="stat-label">Total Collected (${displayYearTitle})</div></div>
-        <div class="stat-card red"><div class="stat-icon"><span class="material-symbols-rounded">trending_down</span></div>
+        <div class="stat-card red"><div class="stat-icon red">📉</div>
           <div class="stat-value">${formatCurrency(data.annual?.total_pending || 0)}</div><div class="stat-label">Outstanding (${displayYearTitle})</div></div>
-        <div class="stat-card accent"><div class="stat-icon"><span class="material-symbols-rounded">receipt</span></div>
+        <div class="stat-card accent"><div class="stat-icon amber">📄</div>
           <div class="stat-value">${data.annual?.total_count || 0}</div><div class="stat-label">Total Transactions (${displayYearTitle})</div></div>
-        <div class="stat-card amber"><div class="stat-icon"><span class="material-symbols-rounded">error</span></div>
+        <div class="stat-card amber"><div class="stat-icon red">🚨</div>
           <div class="stat-value">${data.annual?.overdue_count || 0}</div><div class="stat-label">Overdue (${displayYearTitle})</div></div>
       </div>
       <div class="content-grid">
