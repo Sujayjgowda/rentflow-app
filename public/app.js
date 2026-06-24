@@ -733,12 +733,21 @@ async function renderDashboard() {
       area.innerHTML = `<div class="page-enter">
         ${pendingBanner}
         <div class="stats-grid">
-          <div class="stat-card green"><div class="stat-icon green">🏦</div>
-            <div class="stat-value">${formatCurrency(data.stats.totalPaid)}</div><div class="stat-label">Total Paid</div></div>
-          <div class="stat-card red"><div class="stat-icon red">⚠️</div>
-            <div class="stat-value">${formatCurrency(data.stats.pendingAmount)}</div><div class="stat-label">Pending</div></div>
-          <div class="stat-card accent"><div class="stat-icon amber">🏠</div>
-            <div class="stat-value">${data.stats.activeLeaseCount}</div><div class="stat-label">Active Leases</div></div>
+          <div class="stat-card green">
+            <div class="stat-icon green">🏦</div>
+            <div class="stat-label">Total Paid</div>
+            <div class="stat-value">${formatCurrency(data.stats.totalPaid)}</div>
+          </div>
+          <div class="stat-card red">
+            <div class="stat-icon red">⚠️</div>
+            <div class="stat-label">Pending</div>
+            <div class="stat-value">${formatCurrency(data.stats.pendingAmount)}</div>
+          </div>
+          <div class="stat-card accent">
+            <div class="stat-icon amber">🏠</div>
+            <div class="stat-label">Active Leases</div>
+            <div class="stat-value">${data.stats.activeLeaseCount}</div>
+          </div>
         </div>
         <div class="content-grid">
           <div class="card"><div class="card-header"><span class="card-title">Upcoming Dues</span></div>
@@ -1262,14 +1271,26 @@ async function renderReports(selectedYear = reportSelectedYear, selectedProperty
       </div>
 
       <div class="stats-grid">
-        <div class="stat-card green"><div class="stat-icon green">📈</div>
-          <div class="stat-value">${formatCurrency(data.annual?.total_paid || 0)}</div><div class="stat-label">Total Collected (${displayYearTitle})</div></div>
-        <div class="stat-card red"><div class="stat-icon red">📉</div>
-          <div class="stat-value">${formatCurrency(data.annual?.total_pending || 0)}</div><div class="stat-label">Outstanding (${displayYearTitle})</div></div>
-        <div class="stat-card accent"><div class="stat-icon amber">📄</div>
-          <div class="stat-value">${data.annual?.total_count || 0}</div><div class="stat-label">Total Transactions (${displayYearTitle})</div></div>
-        <div class="stat-card amber"><div class="stat-icon red">🚨</div>
-          <div class="stat-value">${data.annual?.overdue_count || 0}</div><div class="stat-label">Overdue (${displayYearTitle})</div></div>
+        <div class="stat-card green">
+          <div class="stat-icon green">📈</div>
+          <div class="stat-label">Total Collected (${displayYearTitle})</div>
+          <div class="stat-value">${formatCurrency(data.annual?.total_paid || 0)}</div>
+        </div>
+        <div class="stat-card red">
+          <div class="stat-icon red">📉</div>
+          <div class="stat-label">Outstanding (${displayYearTitle})</div>
+          <div class="stat-value">${formatCurrency(data.annual?.total_pending || 0)}</div>
+        </div>
+        <div class="stat-card accent">
+          <div class="stat-icon amber">📄</div>
+          <div class="stat-label">Total Transactions (${displayYearTitle})</div>
+          <div class="stat-value">${data.annual?.total_count || 0}</div>
+        </div>
+        <div class="stat-card amber">
+          <div class="stat-icon red">🚨</div>
+          <div class="stat-label">Overdue (${displayYearTitle})</div>
+          <div class="stat-value">${data.annual?.overdue_count || 0}</div>
+        </div>
       </div>
       <div class="content-grid">
         <div class="card"><div class="card-header"><span class="card-title">${isAllTime ? 'Annual Overview' : 'Monthly Overview'} (${displayYearTitle})</span></div>
