@@ -812,59 +812,115 @@ a:hover {
 .stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 20px;
   padding: 18px 20px;
   position: relative;
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 
+    0px 10px 20px -8px rgba(28,25,23,0.06),
+    inset 3px 3px 6px rgba(255,255,255,0.9),
+    inset -3px -3px 6px rgba(28,25,23,0.03);
   transition: var(--transition);
 }
 
 .stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  border-radius: var(--radius) var(--radius) 0 0;
+  display: none;
 }
 
-.stat-card.accent::before {
-  background: var(--gradient-primary);
+.stat-card.accent {
+  background: #fef3c7;
+  border-color: #fde68a;
+  box-shadow: 
+    0px 10px 20px -8px rgba(217,119,6,0.12),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -5px -5px 10px rgba(217,119,6,0.12);
 }
 
-.stat-card.green::before {
-  background: var(--gradient-green);
+.stat-card.green {
+  background: var(--green-bg);
+  border-color: #bbf7d0;
+  box-shadow: 
+    0px 10px 20px -8px rgba(22,101,52,0.12),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -5px -5px 10px rgba(22,101,52,0.12);
 }
 
-.stat-card.red::before {
-  background: var(--gradient-red);
+.stat-card.red {
+  background: var(--red-bg);
+  border-color: #fecaca;
+  box-shadow: 
+    0px 10px 20px -8px rgba(153,27,27,0.12),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -5px -5px 10px rgba(153,27,27,0.12);
 }
 
-.stat-card.amber::before {
-  background: var(--gradient-amber);
+.stat-card.amber {
+  background: #fef3c7;
+  border-color: #fde68a;
+  box-shadow: 
+    0px 10px 20px -8px rgba(217,119,6,0.12),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -5px -5px 10px rgba(217,119,6,0.12);
 }
 
-.stat-card.blue::before {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+.stat-card.blue {
+  background: var(--blue-bg);
+  border-color: #bfdbfe;
+  box-shadow: 
+    0px 10px 20px -8px rgba(30,64,175,0.12),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -5px -5px 10px rgba(30,64,175,0.12);
 }
 
 .stat-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-light);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+  box-shadow: 
+    0px 16px 24px -10px rgba(28,25,23,0.15),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -6px -6px 12px rgba(28,25,23,0.05);
+}
+
+.stat-card.accent:hover {
+  box-shadow: 
+    0px 16px 24px -10px rgba(217,119,6,0.22),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -7px -7px 14px rgba(217,119,6,0.18);
+}
+
+.stat-card.green:hover {
+  box-shadow: 
+    0px 16px 24px -10px rgba(22,101,52,0.22),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -7px -7px 14px rgba(22,101,52,0.18);
+}
+
+.stat-card.red:hover {
+  box-shadow: 
+    0px 16px 24px -10px rgba(153,27,27,0.22),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -7px -7px 14px rgba(153,27,27,0.18);
+}
+
+.stat-card.blue:hover {
+  box-shadow: 
+    0px 16px 24px -10px rgba(30,64,175,0.22),
+    inset 4px 4px 8px rgba(255,255,255,0.95),
+    inset -7px -7px 14px rgba(30,64,175,0.18);
 }
 
 .stat-icon {
   width: 40px;
   height: 40px;
-  border-radius: 9px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 12px;
   font-size: 1.25rem;
+  box-shadow: 
+    0px 4px 6px rgba(0, 0, 0, 0.04),
+    inset 2px 2px 4px rgba(255, 255, 255, 0.8),
+    inset -2px -2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .stat-icon .material-symbols-rounded {
@@ -872,23 +928,39 @@ a:hover {
 }
 
 .stat-icon.amber {
-  background: var(--yellow-bg);
+  background: #fde68a;
   color: var(--accent);
+  box-shadow: 
+    0px 4px 6px rgba(217,119,6,0.1),
+    inset 2px 2px 4px rgba(255,255,255,0.8),
+    inset -2px -2px 4px rgba(217,119,6,0.15);
 }
 
 .stat-icon.green {
-  background: var(--green-bg);
+  background: #bbf7d0;
   color: var(--green);
+  box-shadow: 
+    0px 4px 6px rgba(22,101,52,0.1),
+    inset 2px 2px 4px rgba(255,255,255,0.8),
+    inset -2px -2px 4px rgba(22,101,52,0.15);
 }
 
 .stat-icon.red {
-  background: var(--red-bg);
+  background: #fecaca;
   color: var(--red);
+  box-shadow: 
+    0px 4px 6px rgba(153,27,27,0.1),
+    inset 2px 2px 4px rgba(255,255,255,0.8),
+    inset -2px -2px 4px rgba(153,27,27,0.15);
 }
 
 .stat-icon.blue {
-  background: var(--blue-bg);
+  background: #bfdbfe;
   color: var(--blue);
+  box-shadow: 
+    0px 4px 6px rgba(30,64,175,0.1),
+    inset 2px 2px 4px rgba(255,255,255,0.8),
+    inset -2px -2px 4px rgba(30,64,175,0.15);
 }
 
 .stat-value {
