@@ -96,11 +96,14 @@ class ApiService {
     }
   }
 
-  // Dashboard: Get portfolio stats and recent items
+  // Dashboard: Get portfolio stats and recent items dynamically based on role
   static Future<Map<String, dynamic>> getDashboard() async {
     final headers = await _getHeaders();
+    final user = await getUser();
+    final role = user?['role'] ?? 'landlord';
+    
     final response = await http.get(
-      Uri.parse('$baseUrl/dashboard'),
+      Uri.parse('$baseUrl/dashboard/$role'),
       headers: headers,
     );
 
@@ -108,6 +111,27 @@ class ApiService {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
       throw Exception('Failed to load dashboard data');
+    }
+  }
+
+  // Generic List Fetcher (for Tenants, Agreements, Bills, etc.)
+  static Future<List<dynamic>> getList(String endpoint) async {
+    final headers = await _getHeaders();
+    final response = await http.get(
+      Uri.parse('$baseUrl/$endpoint'),
+      headers: headers,
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = json.decode(response.body);
+      if (decoded is List) {
+        return decoded;
+      } else if (decoded is Map && decoded.containsKey('data')) {
+        return decoded['data'] as List<dynamic>;
+      }
+      return [];
+    } else {
+      throw Exception('Failed to load $endpoint');
     }
   }
 

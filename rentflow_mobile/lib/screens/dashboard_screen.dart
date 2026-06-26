@@ -7,6 +7,9 @@ import '../widgets/clay_container.dart';
 import 'login_screen.dart';
 import 'properties_screen.dart';
 import 'payments_screen.dart';
+import 'tenants_screen.dart';
+import 'bills_screen.dart';
+import 'agreements_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -72,6 +75,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final titles = ['RentFlow', 'Properties', 'Payments'];
 
     return Scaffold(
+      drawer: _buildDrawer(),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -153,7 +157,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildHomeTab() {
     final stats = _dashboardData?['stats'] ?? {};
     final upcomingDues = _dashboardData?['upcomingDues'] ?? [];
-    final recentPayments = _dashboardData?['recentPayments'] ?? [];
+    final recentPayments = _dashboardData?['recentPayments'] ?? _dashboardData?['recentTransactions'] ?? [];
 
     final monthlyIncome = (stats['monthlyIncome'] ?? 0).toDouble();
     final propertyCount = stats['propertyCount'] ?? 0;
@@ -509,6 +513,118 @@ class _DashboardScreenState extends State<DashboardScreen> {
             activeIcon: Icon(Icons.payments),
             label: 'Payments',
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDrawer() {
+    final String name = _user?['name'] ?? 'RentFlow User';
+    final String email = _user?['email'] ?? 'No Email';
+    final String role = _user?['role'] ?? 'landlord';
+
+    return Drawer(
+      backgroundColor: const Color(0xFFFAF7F2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [ClayColors.accent, ClayColors.accentLight],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                style: GoogleFonts.lora(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: ClayColors.accent,
+                ),
+              ),
+            ),
+            accountName: Text(
+              name,
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            accountEmail: Text(
+              '$email · ${role.toUpperCase()}',
+              style: GoogleFonts.dmSans(fontSize: 13, color: Colors.white.withOpacity(0.9)),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.dashboard_outlined, color: ClayColors.textDark),
+            title: Text('Dashboard', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _currentIndex = 0);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.home_work_outlined, color: ClayColors.textDark),
+            title: Text('Properties', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _currentIndex = 1);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.payments_outlined, color: ClayColors.textDark),
+            title: Text('Payments & Receipts', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _currentIndex = 2);
+            },
+          ),
+          const Divider(indent: 16, endIndent: 16),
+          ListTile(
+            leading: const Icon(Icons.people_outline, color: ClayColors.textDark),
+            title: Text('Tenants Directory', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const TenantsScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.description_outlined, color: ClayColors.textDark),
+            title: Text('Lease Agreements', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AgreementsScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.electrical_services_outlined, color: ClayColors.textDark),
+            title: Text('Shared Bills', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const BillsScreen()),
+              );
+            },
+          ),
+          const Spacer(),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: ClayColors.red),
+            title: Text('Logout', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, color: ClayColors.red)),
+            onTap: () {
+              Navigator.pop(context);
+              _logout();
+            },
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
