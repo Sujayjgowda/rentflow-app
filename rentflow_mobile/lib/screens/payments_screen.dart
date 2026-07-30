@@ -638,47 +638,89 @@ Generated via RentFlow Mobile App
                                           mainAxisAlignment:
                                               MainAxisAlignment.end,
                                           children: [
-                                            if (phone.isNotEmpty)
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.chat_bubble_outline,
-                                                  color: Color(0xFF25D366),
-                                                  size: 20,
-                                                ),
-                                                tooltip: 'WhatsApp Reminder',
-                                                onPressed: () =>
-                                                    _sendWhatsAppReminder(
+                                            if (phone.isNotEmpty) ...[
+                                              InkWell(
+                                                borderRadius: BorderRadius.circular(8),
+                                                onTap: () => _sendWhatsAppReminder(
                                                   phone,
                                                   tenantName,
                                                   amount.toStringAsFixed(0),
                                                   propName,
                                                   dateStr,
                                                 ),
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF25D366).withOpacity(0.12),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.chat_bubble_outline,
+                                                        color: Color(0xFF25D366),
+                                                        size: 16,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        'Reminder',
+                                                        style: GoogleFonts.plusJakartaSans(
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: const Color(0xFF25D366),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
                                               ),
-                                            TextButton.icon(
-                                              onPressed: () => _markPaid(tx['id']),
-                                              icon: const Icon(
-                                                Icons.check_circle,
-                                                size: 16,
-                                                color: AppColors.success,
-                                              ),
-                                              label: Text(
-                                                'Mark Paid',
-                                                style: GoogleFonts.plusJakartaSans(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: AppColors.success,
+                                              const SizedBox(width: 8),
+                                            ],
+                                            InkWell(
+                                              borderRadius: BorderRadius.circular(8),
+                                              onTap: () => _markPaid(tx['id']),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.successBg,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.check_circle_outline,
+                                                      color: AppColors.success,
+                                                      size: 16,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      'Mark Paid',
+                                                      style: GoogleFonts.plusJakartaSans(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: AppColors.success,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                             ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.delete_outline,
-                                                color: AppColors.textMuted,
-                                                size: 18,
+                                            const SizedBox(width: 8),
+                                            InkWell(
+                                              borderRadius: BorderRadius.circular(8),
+                                              onTap: () => _deleteTransaction(tx['id']),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.surfaceLight,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.delete_outline,
+                                                  color: AppColors.textMuted,
+                                                  size: 18,
+                                                ),
                                               ),
-                                              onPressed: () =>
-                                                  _deleteTransaction(tx['id']),
                                             ),
                                           ],
                                         ),

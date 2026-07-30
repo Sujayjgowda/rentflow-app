@@ -382,33 +382,51 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                         color: AppColors.textMuted,
                                       ),
                                       const SizedBox(width: 6),
-                                      Text(
-                                        'Lease: $startStr - $endStr',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 12,
-                                          color: AppColors.textSecondary,
+                                      Expanded(
+                                        child: Text(
+                                          'Lease: $startStr - $endStr',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      const Spacer(),
                                       if (phone.isNotEmpty) ...[
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.phone_outlined,
-                                            color: AppColors.accentCyan,
-                                            size: 20,
+                                        const SizedBox(width: 8),
+                                        InkWell(
+                                          borderRadius: BorderRadius.circular(8),
+                                          onTap: () => _callTenant(phone),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.accentCyan.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: const Icon(
+                                              Icons.phone_outlined,
+                                              color: AppColors.accentCyan,
+                                              size: 18,
+                                            ),
                                           ),
-                                          tooltip: 'Call',
-                                          onPressed: () => _callTenant(phone),
                                         ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.chat_bubble_outline,
-                                            color: Color(0xFF25D366),
-                                            size: 20,
+                                        const SizedBox(width: 8),
+                                        InkWell(
+                                          borderRadius: BorderRadius.circular(8),
+                                          onTap: () => _openWhatsApp(phone, name),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF25D366).withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: const Icon(
+                                              Icons.chat_bubble_outline,
+                                              color: Color(0xFF25D366),
+                                              size: 18,
+                                            ),
                                           ),
-                                          tooltip: 'WhatsApp',
-                                          onPressed: () =>
-                                              _openWhatsApp(phone, name),
                                         ),
                                       ],
                                     ],
