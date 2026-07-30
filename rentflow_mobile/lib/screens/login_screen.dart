@@ -31,27 +31,27 @@ class _LoginScreenState extends State<LoginScreen> {
 <svg viewBox="0 0 64 64" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="roofGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#7C3AED" />
-      <stop offset="100%" stop-color="#06B6D4" />
+      <stop offset="0%" stop-color="#ffb86c" />
+      <stop offset="100%" stop-color="#e28743" />
     </linearGradient>
     <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1E1E32" />
-      <stop offset="100%" stop-color="#252540" />
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#e2e8f0" />
     </linearGradient>
     <linearGradient id="doorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#06B6D4" />
-      <stop offset="100%" stop-color="#3B82F6" />
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="100%" stop-color="#2563eb" />
     </linearGradient>
     <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10B981" />
-      <stop offset="100%" stop-color="#34D399" />
+      <stop offset="0%" stop-color="#4ade80" />
+      <stop offset="100%" stop-color="#16a34a" />
     </linearGradient>
   </defs>
   <g>
-    <rect x="18" y="24" width="28" height="24" rx="6" fill="url(#bodyGrad)" stroke="#3A3A5A" stroke-width="1.5" />
+    <rect x="18" y="24" width="28" height="24" rx="6" fill="url(#bodyGrad)" />
     <rect x="28" y="34" width="8" height="14" rx="2" fill="url(#doorGrad)" />
     <path d="M 12 26 L 30 10 C 31 9, 33 9, 34 10 L 52 26 C 53.5 27.2, 52.5 29, 50.5 29 L 13.5 29 C 11.5 29, 10.5 27.2, 12 26 Z" fill="url(#roofGrad)" />
-    <rect x="42" y="14" width="5" height="10" rx="1.5" fill="#7C3AED" />
+    <rect x="42" y="14" width="5" height="10" rx="1.5" fill="#e28743" />
     <path d="M 11 44 C 9 53, 33 56, 44 48" fill="none" stroke="url(#arrowGrad)" stroke-width="4.5" stroke-linecap="round" />
     <path d="M 44 48 L 47 42 L 39 45 Z" fill="url(#arrowGrad)" stroke="url(#arrowGrad)" stroke-width="1.5" stroke-linejoin="round" />
   </g>
