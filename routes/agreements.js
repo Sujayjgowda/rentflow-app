@@ -5,24 +5,13 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('../db');
 const { authenticate, requireRole } = require('../middleware/auth');
+const googleDrive = require('../services/googleDrive');
 
 const router = express.Router();
 
-// Configure multer for agreement uploads
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const dir = path.join(__dirname, '..', 'uploads', 'agreements');
-        fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-    },
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `agreement-${Date.now()}${ext}`);
-    }
-});
-
+// Use memory storage — files go to Google Drive, not disk
 const upload = multer({
-    storage,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
     fileFilter: (req, file, cb) => {
         const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
@@ -106,20 +95,37 @@ router.post('/:property_id', authenticate, requireRole('landlord'), upload.singl
 
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-        // Delete old agreement file if exists
-        const existing = await query('SELECT id, file_path FROM rent_agreements WHERE property_id = $1', [property_id]);
+        // Delete old agreement (from Drive and DB)
+        const existing = await query('SELECT id, file_path, drive_file_id FROM rent_agreements WHERE property_id = $1', [property_id]);
         if (existing.rows.length > 0) {
-            const oldPath = path.join(__dirname, '..', existing.rows[0].file_path);
-            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            // Delete from Google Drive if we have a drive_file_id
+            if (existing.rows[0].drive_file_id) {
+                try {
+                    await googleDrive.deleteFile(existing.rows[0].drive_file_id);
+                } catch (driveErr) {
+                    console.warn('Warning: Could not delete old agreement from Drive:', driveErr.message);
+                }
+            } else {
+                // Legacy: try deleting local file
+                const oldPath = path.join(__dirname, '..', existing.rows[0].file_path);
+                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            }
             await query('DELETE FROM rent_agreements WHERE property_id = $1', [property_id]);
         }
 
+        // Upload to Google Drive
+        const driveResult = await googleDrive.uploadFile(
+            req.file.buffer,
+            req.file.originalname,
+            req.file.mimetype,
+            'agreements'
+        );
+
         const id = uuidv4();
-        const filePath = `/uploads/agreements/${req.file.filename}`;
 
         await query(
-            'INSERT INTO rent_agreements (id, property_id, file_name, file_path, file_type, uploaded_by) VALUES ($1, $2, $3, $4, $5, $6)',
-            [id, property_id, req.file.originalname, filePath, req.file.mimetype, req.user.id]
+            'INSERT INTO rent_agreements (id, property_id, file_name, file_path, file_type, uploaded_by, drive_file_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            [id, property_id, req.file.originalname, driveResult.viewLink, req.file.mimetype, req.user.id, driveResult.fileId]
         );
 
         await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)',
@@ -146,11 +152,21 @@ router.delete('/:property_id', authenticate, requireRole('landlord'), async (req
         const prop = await query('SELECT id FROM properties WHERE id = $1 AND owner_id = $2', [property_id, req.user.id]);
         if (prop.rows.length === 0) return res.status(404).json({ error: 'Property not found' });
 
-        const existing = await query('SELECT id, file_path FROM rent_agreements WHERE property_id = $1', [property_id]);
+        const existing = await query('SELECT id, file_path, drive_file_id FROM rent_agreements WHERE property_id = $1', [property_id]);
         if (existing.rows.length === 0) return res.status(404).json({ error: 'No agreement found' });
 
-        const oldPath = path.join(__dirname, '..', existing.rows[0].file_path);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        // Delete from Google Drive
+        if (existing.rows[0].drive_file_id) {
+            try {
+                await googleDrive.deleteFile(existing.rows[0].drive_file_id);
+            } catch (driveErr) {
+                console.warn('Warning: Could not delete agreement from Drive:', driveErr.message);
+            }
+        } else {
+            // Legacy local file cleanup
+            const oldPath = path.join(__dirname, '..', existing.rows[0].file_path);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
 
         await query('DELETE FROM rent_agreements WHERE property_id = $1', [property_id]);
 

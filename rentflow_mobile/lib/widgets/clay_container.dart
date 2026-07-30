@@ -12,7 +12,7 @@ class ClayContainer extends StatelessWidget {
   final double? height;
 
   const ClayContainer({
-    Key? key,
+    super.key,
     this.child,
     this.radius = 20.0,
     required this.color,
@@ -22,7 +22,7 @@ class ClayContainer extends StatelessWidget {
     this.margin,
     this.width,
     this.height,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

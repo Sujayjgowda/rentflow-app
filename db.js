@@ -176,6 +176,19 @@ async function initDB() {
       console.warn('⚠️ receipt_path migration warning:', migrationErr.message);
     }
 
+    // Migrate: add drive_file_id columns for Google Drive integration
+    try {
+      await client.query(`
+        ALTER TABLE rent_agreements ADD COLUMN IF NOT EXISTS drive_file_id TEXT;
+        ALTER TABLE shared_bills ADD COLUMN IF NOT EXISTS drive_file_id TEXT;
+        ALTER TABLE transactions ADD COLUMN IF NOT EXISTS drive_file_id TEXT;
+        ALTER TABLE advance_payments ADD COLUMN IF NOT EXISTS drive_file_id TEXT;
+      `);
+      console.log('✅ drive_file_id columns verified/added for Google Drive integration');
+    } catch (migrationErr) {
+      console.warn('⚠️ drive_file_id migration warning:', migrationErr.message);
+    }
+
     // Seed admin account if it doesn't exist
     const adminCheck = await client.query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
     if (adminCheck.rows.length === 0) {

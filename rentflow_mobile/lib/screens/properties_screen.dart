@@ -3,10 +3,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../constants/colors.dart';
 import '../services/api_service.dart';
-import '../widgets/clay_container.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/glass_text_field.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/status_chip.dart';
+import '../utils/helpers.dart';
 
 class PropertiesScreen extends StatefulWidget {
-  const PropertiesScreen({Key? key}) : super(key: key);
+  const PropertiesScreen({super.key});
 
   @override
   State<PropertiesScreen> createState() => _PropertiesScreenState();
@@ -37,13 +41,13 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Failed to load properties from server.';
+        _errorMessage = 'Failed to load properties.';
         _isLoading = false;
       });
     }
   }
 
-  Future<void> _deleteProperty(int id) async {
+  Future<void> _deleteProperty(dynamic id) async {
     try {
       await ApiService.deleteProperty(id);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -62,7 +66,6 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
     final typeController = TextEditingController();
     final addressController = TextEditingController();
     final rentController = TextEditingController();
-    final depositController = TextEditingController();
 
     showModalBottomSheet(
       context: context,
@@ -71,11 +74,8 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
       builder: (context) {
         return Container(
           decoration: const BoxDecoration(
-            color: Color(0xFFFAF7F2),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(30),
-              topRight: Radius.circular(30),
-            ),
+            color: AppColors.bgCard,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
           ),
           padding: EdgeInsets.only(
             top: 24,
@@ -90,10 +90,10 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
               children: [
                 Center(
                   child: Container(
-                    width: 50,
-                    height: 5,
+                    width: 40,
+                    height: 4,
                     decoration: BoxDecoration(
-                      color: ClayColors.textMuted.withOpacity(0.3),
+                      color: AppColors.textMuted.withOpacity(0.4),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -101,48 +101,47 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                 const SizedBox(height: 20),
                 Text(
                   'Add New Property',
-                  style: GoogleFonts.lora(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: ClayColors.textDark,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 20),
-                _buildModalTextField(nameController, 'Property Name (e.g. Apartment 3B)', Icons.business_outlined),
+                GlassTextField(
+                  controller: nameController,
+                  hintText: 'Property Name (e.g. Sunset Heights 4B)',
+                  prefixIcon: Icons.domain_outlined,
+                ),
                 const SizedBox(height: 12),
-                _buildModalTextField(typeController, 'Type (e.g. Apartment, Villa)', Icons.house_outlined),
+                GlassTextField(
+                  controller: typeController,
+                  hintText: 'Type (e.g. Apartment, Villa)',
+                  prefixIcon: Icons.home_outlined,
+                ),
                 const SizedBox(height: 12),
-                _buildModalTextField(addressController, 'Address', Icons.location_on_outlined),
+                GlassTextField(
+                  controller: addressController,
+                  hintText: 'Address',
+                  prefixIcon: Icons.location_on_outlined,
+                ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildModalTextField(
-                        rentController,
-                        'Rent Amount (₹)',
-                        Icons.payments_outlined,
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildModalTextField(
-                        depositController,
-                        'Deposit (₹)',
-                        Icons.security_outlined,
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                  ],
+                GlassTextField(
+                  controller: rentController,
+                  hintText: 'Monthly Rent (₹)',
+                  prefixIcon: Icons.payments_outlined,
+                  keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
+                GradientButton(
+                  text: 'Save Property',
                   onPressed: () async {
-                    if (nameController.text.isEmpty ||
-                        typeController.text.isEmpty ||
+                    if (nameController.text.trim().isEmpty ||
                         rentController.text.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please fill all required fields')),
+                        const SnackBar(
+                          content: Text('Please fill property name and rent amount'),
+                        ),
                       );
                       return;
                     }
@@ -150,34 +149,24 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                     try {
                       await ApiService.createProperty({
                         'name': nameController.text.trim(),
-                        'type': typeController.text.trim(),
+                        'property_type': typeController.text.trim().isEmpty
+                            ? 'apartment'
+                            : typeController.text.trim(),
                         'address': addressController.text.trim(),
                         'rent_amount': double.parse(rentController.text),
-                        'deposit_amount': depositController.text.isEmpty
-                            ? 0.0
-                            : double.parse(depositController.text),
                       });
                       Navigator.pop(context);
                       _fetchProperties();
                     } catch (e) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                        SnackBar(
+                          content: Text(
+                            e.toString().replaceAll('Exception: ', ''),
+                          ),
+                        ),
                       );
                     }
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: ClayColors.accent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    'Save Property',
-                    style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
                 ),
               ],
             ),
@@ -187,23 +176,51 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
     );
   }
 
+  String _formatCurrency(double amt) {
+    final format = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    );
+    return format.format(amt);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accentPurple),
+            )
           : _errorMessage != null
               ? Center(
-                  child: Text(_errorMessage!, style: GoogleFonts.dmSans(color: ClayColors.red)),
+                  child: Text(
+                    _errorMessage!,
+                    style: GoogleFonts.plusJakartaSans(color: AppColors.error),
+                  ),
                 )
               : RefreshIndicator(
                   onRefresh: _fetchProperties,
+                  color: AppColors.accentPurple,
                   child: _properties.isEmpty
                       ? Center(
-                          child: Text(
-                            'No properties added yet.',
-                            style: GoogleFonts.dmSans(color: ClayColors.textMuted),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.domain_disabled_outlined,
+                                size: 48,
+                                color: AppColors.textMuted,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No properties added yet.',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
                           ),
                         )
                       : ListView.builder(
@@ -211,41 +228,48 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                           itemCount: _properties.length,
                           itemBuilder: (context, index) {
                             final prop = _properties[index];
-                            final status = prop['status'] ?? 'vacant';
-                            final isOccupied = status.toLowerCase() == 'occupied';
+                            final status = (prop['status'] ?? 'vacant').toString();
+                            final isOccupied = status.toLowerCase() == 'occupied' ||
+                                (prop['tenant_name'] != null &&
+                                    prop['tenant_name'].toString().isNotEmpty);
 
-                            final rentAmount = (prop['rent_amount'] ?? 0).toDouble();
+                            final rentAmount = parseDouble(prop['rent_amount']);
 
-                            return ClayContainer(
-                              color: Colors.white,
-                              margin: const EdgeInsets.only(bottom: 16),
-                              padding: const EdgeInsets.all(20),
+                            return GlassCard(
+                              margin: const EdgeInsets.only(bottom: 14),
+                              padding: const EdgeInsets.all(18),
                               child: Row(
                                 children: [
-                                  // Clay Property Icon
-                                  ClayContainer(
-                                    width: 50,
-                                    height: 50,
-                                    radius: 12,
-                                    color: isOccupied ? ClayColors.pastelBlue : ClayColors.pastelGreen,
-                                    child: Center(
-                                      child: Text(
-                                        isOccupied ? '🏢' : '🏡',
-                                        style: const TextStyle(fontSize: 22),
-                                      ),
+                                  // Property Icon
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      gradient: isOccupied
+                                          ? AppColors.accentGradient
+                                          : AppColors.greenGradient,
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Icon(
+                                      isOccupied
+                                          ? Icons.business
+                                          : Icons.home_work,
+                                      color: Colors.white,
+                                      size: 24,
                                     ),
                                   ),
-                                  const SizedBox(width: 16),
+                                  const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           prop['name'] ?? 'Property',
-                                          style: GoogleFonts.dmSans(
+                                          style: GoogleFonts.plusJakartaSans(
                                             fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: ClayColors.textDark,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.textPrimary,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -253,46 +277,27 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                                           prop['address'] ?? 'No Address',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.dmSans(
-                                            fontSize: 13,
-                                            color: ClayColors.textMuted,
-                                            fontWeight: FontWeight.w500,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary,
                                           ),
                                         ),
                                         const SizedBox(height: 8),
                                         Row(
                                           children: [
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: isOccupied
-                                                    ? ClayColors.pastelBlue
-                                                    : ClayColors.pastelGreen,
-                                                borderRadius: BorderRadius.circular(8),
-                                              ),
-                                              child: Text(
-                                                isOccupied ? 'Occupied' : 'Vacant',
-                                                style: GoogleFonts.dmSans(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: isOccupied ? ClayColors.blue : ClayColors.green,
-                                                ),
-                                              ),
+                                            StatusChip(
+                                              status: isOccupied
+                                                  ? 'Occupied'
+                                                  : 'Vacant',
                                             ),
-                                            const SizedBox(width: 8),
+                                            const SizedBox(width: 10),
                                             Text(
-                                              _formatCurrency(rentAmount),
-                                              style: GoogleFonts.lora(
-                                                fontWeight: FontWeight.bold,
-                                                color: ClayColors.accent,
+                                              '${_formatCurrency(rentAmount)}/mo',
+                                              style:
+                                                  GoogleFonts.plusJakartaSans(
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.accentCyan,
                                                 fontSize: 14,
-                                              ),
-                                            ),
-                                            Text(
-                                              '/mo',
-                                              style: GoogleFonts.dmSans(
-                                                fontSize: 11,
-                                                color: ClayColors.textMuted,
                                               ),
                                             ),
                                           ],
@@ -302,24 +307,54 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                                   ),
                                   // Delete Button
                                   IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: ClayColors.textMuted),
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: AppColors.textMuted,
+                                      size: 20,
+                                    ),
                                     onPressed: () {
                                       showDialog(
                                         context: context,
                                         builder: (context) => AlertDialog(
-                                          title: Text('Delete Property', style: GoogleFonts.lora(fontWeight: FontWeight.bold)),
-                                          content: Text('Are you sure you want to delete ${prop['name']}?'),
+                                          backgroundColor: AppColors.surface,
+                                          title: Text(
+                                            'Delete Property',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          content: Text(
+                                            'Are you sure you want to delete ${prop['name']}?',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
                                           actions: [
                                             TextButton(
-                                              onPressed: () => Navigator.pop(context),
-                                              child: const Text('Cancel'),
+                                              onPressed: () =>
+                                                  Navigator.pop(context),
+                                              child: Text(
+                                                'Cancel',
+                                                style: GoogleFonts
+                                                    .plusJakartaSans(
+                                                  color: AppColors.textMuted,
+                                                ),
+                                              ),
                                             ),
                                             TextButton(
                                               onPressed: () {
                                                 Navigator.pop(context);
                                                 _deleteProperty(prop['id']);
                                               },
-                                              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                              child: Text(
+                                                'Delete',
+                                                style: GoogleFonts
+                                                    .plusJakartaSans(
+                                                  color: AppColors.error,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -334,48 +369,9 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                 ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddPropertyDialog,
-        backgroundColor: ClayColors.accent,
+        backgroundColor: AppColors.accentPurple,
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );
-  }
-
-  Widget _buildModalTextField(
-    TextEditingController controller,
-    String hint,
-    IconData icon, {
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            offset: Offset(1, 2),
-            blurRadius: 4,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: GoogleFonts.dmSans(color: ClayColors.textDark),
-        decoration: InputDecoration(
-          icon: Icon(icon, color: ClayColors.textMuted, size: 20),
-          hintText: hint,
-          hintStyle: GoogleFonts.dmSans(color: ClayColors.textMuted),
-          border: InputBorder.none,
-        ),
-      ),
-    );
-  }
-
-  String _formatCurrency(double amt) {
-    final format = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
-    return format.format(amt);
   }
 }

@@ -5,20 +5,11 @@ const path = require('path');
 const fs = require('fs');
 const { query } = require('../db');
 const { authenticate } = require('../middleware/auth');
+const googleDrive = require('../services/googleDrive');
 
-const uploadDir = path.join(__dirname, '..', 'uploads');
-fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadDir),
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `receipt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`);
-    }
-});
-
+// Use memory storage — files go to Google Drive, not disk
 const upload = multer({
-    storage,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         const allowed = ['.jpg', '.jpeg', '.png', '.pdf', '.webp'];
@@ -241,12 +232,25 @@ router.post('/', authenticate, upload.single('receipt'), async (req, res) => {
         }
 
         const id = uuidv4();
-        const receipt_path = req.file ? `/uploads/${req.file.filename}` : null;
+        let receipt_path = null;
+        let drive_file_id = null;
+
+        // Upload receipt to Google Drive if provided
+        if (req.file) {
+            const driveResult = await googleDrive.uploadFile(
+                req.file.buffer,
+                req.file.originalname,
+                req.file.mimetype,
+                'receipts'
+            );
+            receipt_path = driveResult.viewLink;
+            drive_file_id = driveResult.fileId;
+        }
 
         await query(`
-            INSERT INTO transactions (id, property_id, tenant_id, amount, date_paid, due_date, mode, status, receipt_path, notes, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        `, [id, property_id, tenant_id || null, parseFloat(amount), date_paid || null, due_date, mode || 'cash', status || 'pending', receipt_path, notes || null, req.user.id]);
+            INSERT INTO transactions (id, property_id, tenant_id, amount, date_paid, due_date, mode, status, receipt_path, notes, created_by, drive_file_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `, [id, property_id, tenant_id || null, parseFloat(amount), date_paid || null, due_date, mode || 'cash', status || 'pending', receipt_path, notes || null, req.user.id, drive_file_id]);
 
         await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)',
             [req.user.id, 'create_transaction', `Recorded ₹${amount} transaction for ${due_date}`]
@@ -317,7 +321,15 @@ router.delete('/:id', authenticate, async (req, res) => {
 
         if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
-        if (transaction.receipt_path) {
+        // Delete from Google Drive if applicable
+        if (transaction.drive_file_id) {
+            try {
+                await googleDrive.deleteFile(transaction.drive_file_id);
+            } catch (driveErr) {
+                console.warn('Warning: Could not delete receipt from Drive:', driveErr.message);
+            }
+        } else if (transaction.receipt_path && !transaction.receipt_path.startsWith('http')) {
+            // Legacy local file cleanup
             const filePath = path.join(__dirname, '..', transaction.receipt_path);
             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }

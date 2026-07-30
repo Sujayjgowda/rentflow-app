@@ -7,3 +7,4 @@ ios/
 *.log
 public_backup/
 
+*.apk

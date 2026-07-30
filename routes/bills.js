@@ -5,20 +5,11 @@ const path = require('path');
 const fs = require('fs');
 const { query } = require('../db');
 const { authenticate, requireRole } = require('../middleware/auth');
+const googleDrive = require('../services/googleDrive');
 
-const uploadDir = path.join(__dirname, '..', 'uploads', 'bills');
-fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadDir),
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `bill_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`);
-    }
-});
-
+// Use memory storage — files go to Google Drive, not disk
 const upload = multer({
-    storage,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     fileFilter: (req, file, cb) => {
         const allowed = ['.jpg', '.jpeg', '.png', '.pdf', '.webp'];
@@ -121,14 +112,28 @@ router.post('/', authenticate, requireRole('landlord'), upload.single('bill'), a
         }
 
         const id = uuidv4();
-        const file_path = req.file ? `/uploads/bills/${req.file.filename}` : null;
+        let file_path = null;
+        let drive_file_id = null;
+
+        // Upload to Google Drive if file provided
+        if (req.file) {
+            const driveResult = await googleDrive.uploadFile(
+                req.file.buffer,
+                req.file.originalname,
+                req.file.mimetype,
+                'bills'
+            );
+            file_path = driveResult.viewLink;
+            drive_file_id = driveResult.fileId;
+        }
+
         const parsedTotal = parseFloat(total_amount);
         const tenant_share = parsedTotal / 2;
 
         await query(`
-            INSERT INTO shared_bills (id, property_id, tenant_id, bill_name, total_amount, tenant_share, due_date, file_path, status, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        `, [id, property_id, tenant_id, bill_name, parsedTotal, tenant_share, due_date, file_path, 'pending', req.user.id]);
+            INSERT INTO shared_bills (id, property_id, tenant_id, bill_name, total_amount, tenant_share, due_date, file_path, status, created_by, drive_file_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `, [id, property_id, tenant_id, bill_name, parsedTotal, tenant_share, due_date, file_path, 'pending', req.user.id, drive_file_id]);
 
         await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)', [
             req.user.id,
@@ -245,7 +250,15 @@ router.delete('/:id', authenticate, requireRole('landlord'), async (req, res) =>
             return res.status(404).json({ error: 'Bill not found or access denied' });
         }
 
-        if (bill.file_path) {
+        // Delete from Google Drive
+        if (bill.drive_file_id) {
+            try {
+                await googleDrive.deleteFile(bill.drive_file_id);
+            } catch (driveErr) {
+                console.warn('Warning: Could not delete bill file from Drive:', driveErr.message);
+            }
+        } else if (bill.file_path && !bill.file_path.startsWith('http')) {
+            // Legacy local file cleanup
             const fullPath = path.join(__dirname, '..', bill.file_path);
             if (fs.existsSync(fullPath)) {
                 fs.unlinkSync(fullPath);

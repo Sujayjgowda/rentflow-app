@@ -6,18 +6,17 @@ import '../services/api_service.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_text_field.dart';
 import '../widgets/gradient_button.dart';
-import '../widgets/status_chip.dart';
 import '../utils/helpers.dart';
 
-class BillsScreen extends StatefulWidget {
-  const BillsScreen({super.key});
+class AdvancesScreen extends StatefulWidget {
+  const AdvancesScreen({super.key});
 
   @override
-  State<BillsScreen> createState() => _BillsScreenState();
+  State<AdvancesScreen> createState() => _AdvancesScreenState();
 }
 
-class _BillsScreenState extends State<BillsScreen> {
-  List<dynamic> _bills = [];
+class _AdvancesScreenState extends State<AdvancesScreen> {
+  List<dynamic> _advances = [];
   bool _isLoading = true;
   String? _errorMessage;
   Map<String, dynamic>? _user;
@@ -25,10 +24,10 @@ class _BillsScreenState extends State<BillsScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchBills();
+    _fetchAdvances();
   }
 
-  Future<void> _fetchBills() async {
+  Future<void> _fetchAdvances() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -36,27 +35,27 @@ class _BillsScreenState extends State<BillsScreen> {
 
     try {
       final user = await ApiService.getUser();
-      final bills = await ApiService.getBills();
+      final advances = await ApiService.getAdvances();
       setState(() {
         _user = user;
-        _bills = bills;
+        _advances = advances;
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Failed to load shared bills.';
+        _errorMessage = 'Failed to load security deposits.';
         _isLoading = false;
       });
     }
   }
 
-  Future<void> _markBillPaid(dynamic id) async {
+  Future<void> _deleteAdvance(dynamic id) async {
     try {
-      await ApiService.markBillPaid(id);
+      await ApiService.deleteAdvance(id);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bill marked as paid ✅')),
+        const SnackBar(content: Text('Advance deposit record deleted')),
       );
-      _fetchBills();
+      _fetchAdvances();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
@@ -64,11 +63,10 @@ class _BillsScreenState extends State<BillsScreen> {
     }
   }
 
-  void _showAddBillDialog() async {
-    final billNameController = TextEditingController();
-    final totalAmountController = TextEditingController();
-    final tenantShareController = TextEditingController();
-    final dueDateController = TextEditingController(
+  void _showAddAdvanceDialog() async {
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+    final dateController = TextEditingController(
       text: DateTime.now().toIso8601String().split('T')[0],
     );
 
@@ -119,7 +117,7 @@ class _BillsScreenState extends State<BillsScreen> {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Create Shared Bill',
+                      'Record Advance Payment',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -191,75 +189,51 @@ class _BillsScreenState extends State<BillsScreen> {
                     const SizedBox(height: 12),
 
                     GlassTextField(
-                      controller: billNameController,
-                      hintText: 'Bill Name (e.g. Electricity Oct 2026)',
-                      prefixIcon: Icons.bolt_outlined,
-                    ),
-                    const SizedBox(height: 12),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GlassTextField(
-                            controller: totalAmountController,
-                            hintText: 'Total Bill (₹)',
-                            prefixIcon: Icons.receipt_outlined,
-                            keyboardType: TextInputType.number,
-                            onChanged: (val) {
-                              final total = double.tryParse(val) ?? 0;
-                              setModalState(() {
-                                tenantShareController.text =
-                                    (total * 0.5).toStringAsFixed(0);
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: GlassTextField(
-                            controller: tenantShareController,
-                            hintText: 'Tenant Share (₹)',
-                            prefixIcon: Icons.pie_chart_outline,
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                      ],
+                      controller: amountController,
+                      hintText: 'Advance Amount (₹)',
+                      prefixIcon: Icons.account_balance_wallet_outlined,
+                      keyboardType: TextInputType.number,
                     ),
                     const SizedBox(height: 12),
 
                     GlassTextField(
-                      controller: dueDateController,
-                      hintText: 'Due Date (YYYY-MM-DD)',
+                      controller: dateController,
+                      hintText: 'Paid Date (YYYY-MM-DD)',
                       prefixIcon: Icons.calendar_month_outlined,
+                    ),
+                    const SizedBox(height: 12),
+
+                    GlassTextField(
+                      controller: notesController,
+                      hintText: 'Notes (e.g. 2 Months Rent Deposit)',
+                      prefixIcon: Icons.edit_note_outlined,
                     ),
                     const SizedBox(height: 24),
 
                     GradientButton(
-                      text: 'Add Shared Bill',
+                      text: 'Save Advance Deposit',
                       onPressed: () async {
                         if (selectedPropId == null ||
                             selectedTenantId == null ||
-                            billNameController.text.trim().isEmpty ||
-                            totalAmountController.text.isEmpty) {
+                            amountController.text.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Please fill all required fields'),
+                              content: Text('Please select property, tenant and amount'),
                             ),
                           );
                           return;
                         }
 
                         try {
-                          await ApiService.createBill({
+                          await ApiService.createAdvance({
                             'property_id': selectedPropId,
                             'tenant_id': selectedTenantId,
-                            'bill_name': billNameController.text.trim(),
-                            'total_amount': double.parse(totalAmountController.text),
-                            'tenant_share': double.parse(tenantShareController.text),
-                            'due_date': dueDateController.text.trim(),
+                            'amount': double.parse(amountController.text),
+                            'paid_date': dateController.text.trim(),
+                            'notes': notesController.text.trim(),
                           });
                           Navigator.pop(context);
-                          _fetchBills();
+                          _fetchAdvances();
                         } catch (e) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -300,7 +274,7 @@ class _BillsScreenState extends State<BillsScreen> {
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: Text(
-            'Shared Utility Bills',
+            'Security Advances',
             style: GoogleFonts.plusJakartaSans(
               fontWeight: FontWeight.w700,
               fontSize: 18,
@@ -323,21 +297,21 @@ class _BillsScreenState extends State<BillsScreen> {
                     ),
                   )
                 : RefreshIndicator(
-                    onRefresh: _fetchBills,
+                    onRefresh: _fetchAdvances,
                     color: AppColors.accentPurple,
-                    child: _bills.isEmpty
+                    child: _advances.isEmpty
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 const Icon(
-                                  Icons.receipt_long_outlined,
+                                  Icons.account_balance_wallet_outlined,
                                   size: 48,
                                   color: AppColors.textMuted,
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
-                                  'No shared bills recorded.',
+                                  'No advance deposits recorded.',
                                   style: GoogleFonts.plusJakartaSans(
                                     color: AppColors.textMuted,
                                   ),
@@ -347,110 +321,94 @@ class _BillsScreenState extends State<BillsScreen> {
                           )
                         : ListView.builder(
                             padding: const EdgeInsets.all(20.0),
-                            itemCount: _bills.length,
+                            itemCount: _advances.length,
                             itemBuilder: (context, index) {
-                              final bill = _bills[index];
-                              final total = parseDouble(bill['total_amount']);
-                              final share = parseDouble(bill['tenant_share']);
-                              final date = parseDateTime(bill['due_date']);
+                              final adv = _advances[index];
+                              final amount = parseDouble(adv['amount']);
+                              final date = parseDateTime(adv['paid_date']);
                               final dateStr =
                                   DateFormat('dd MMM yyyy').format(date);
-                              final isPaid = bill['status'] == 'paid';
 
                               return GlassCard(
                                 margin: const EdgeInsets.only(bottom: 14),
                                 padding: const EdgeInsets.all(16),
-                                child: Column(
+                                child: Row(
                                   children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          width: 44,
-                                          height: 44,
-                                          decoration: const BoxDecoration(
-                                            gradient: AppColors.warmGradient,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.bolt,
-                                            color: Colors.white,
-                                            size: 24,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 14),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                bill['bill_name'] ??
-                                                    'Shared Bill',
-                                                style: GoogleFonts.plusJakartaSans(
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: AppColors.textPrimary,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                'Tenant: ${bill['tenant_name'] ?? 'N/A'} · Due: $dateStr',
-                                                style: GoogleFonts.plusJakartaSans(
-                                                  fontSize: 12,
-                                                  color: AppColors.textSecondary,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.end,
-                                          children: [
-                                            Text(
-                                              _formatCurrency(share),
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.accentCyan,
-                                              ),
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        gradient: AppColors.greenGradient,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        Icons.security,
+                                        color: Colors.white,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            adv['property_name'] ?? 'Property',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.textPrimary,
                                             ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Tenant: ${adv['tenant_name'] ?? 'N/A'}',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                          if (adv['notes'] != null &&
+                                              adv['notes'].toString().isNotEmpty)
                                             Text(
-                                              'Total: ${_formatCurrency(total)}',
+                                              'Notes: ${adv['notes']}',
                                               style: GoogleFonts.plusJakartaSans(
                                                 fontSize: 11,
                                                 color: AppColors.textMuted,
                                               ),
                                             ),
-                                          ],
-                                        ),
-                                      ],
+                                          Text(
+                                            'Paid on $dateStr',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 11,
+                                              color: AppColors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
                                       children: [
-                                        StatusChip(
-                                          status: isPaid ? 'Paid' : 'Unpaid',
+                                        Text(
+                                          _formatCurrency(amount),
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.success,
+                                          ),
                                         ),
-                                        if (isLandlord && !isPaid)
-                                          TextButton.icon(
-                                            onPressed: () =>
-                                                _markBillPaid(bill['id']),
+                                        if (isLandlord)
+                                          IconButton(
                                             icon: const Icon(
-                                              Icons.check_circle,
-                                              size: 16,
-                                              color: AppColors.success,
+                                              Icons.delete_outline,
+                                              color: AppColors.textMuted,
+                                              size: 18,
                                             ),
-                                            label: Text(
-                                              'Mark Paid',
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: AppColors.success,
-                                              ),
-                                            ),
+                                            onPressed: () =>
+                                                _deleteAdvance(adv['id']),
                                           ),
                                       ],
                                     ),
@@ -462,7 +420,7 @@ class _BillsScreenState extends State<BillsScreen> {
                   ),
         floatingActionButton: isLandlord
             ? FloatingActionButton(
-                onPressed: _showAddBillDialog,
+                onPressed: _showAddAdvanceDialog,
                 backgroundColor: AppColors.accentPurple,
                 child: const Icon(Icons.add, color: Colors.white),
               )

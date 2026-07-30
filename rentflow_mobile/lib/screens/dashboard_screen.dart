@@ -3,16 +3,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../constants/colors.dart';
 import '../services/api_service.dart';
-import '../widgets/clay_container.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/animated_stat_card.dart';
+import '../widgets/status_chip.dart';
+import '../utils/helpers.dart';
 import 'login_screen.dart';
 import 'properties_screen.dart';
 import 'payments_screen.dart';
 import 'tenants_screen.dart';
-import 'bills_screen.dart';
-import 'agreements_screen.dart';
+import 'more_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  const DashboardScreen({super.key});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -57,9 +59,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _logout() async {
     await ApiService.clearSession();
     if (mounted) {
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
       );
     }
   }
@@ -70,64 +73,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _buildHomeTab(),
       const PropertiesScreen(),
       const PaymentsScreen(),
+      const TenantsScreen(),
+      const MoreScreen(),
     ];
 
-    final titles = ['RentFlow', 'Properties', 'Payments'];
+    final titles = ['RentFlow', 'Properties', 'Payments', 'Tenants', 'More Options'];
 
     return Scaffold(
-      drawer: _buildDrawer(),
+      backgroundColor: AppColors.bgDark,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Row(
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 34,
+              height: 34,
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x0A000000),
-                    offset: Offset(0, 4),
-                    blurRadius: 8,
-                  ),
-                ],
+                gradient: AppColors.accentGradient,
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: const Center(
-                child: Text('🏠', style: TextStyle(fontSize: 16)),
-              ),
+              child: const Icon(Icons.home_work_rounded, color: Colors.white, size: 20),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Text(
               titles[_currentIndex],
-              style: GoogleFonts.lora(
-                fontWeight: FontWeight.bold,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w800,
                 fontSize: 20,
-                color: ClayColors.textDark,
+                color: AppColors.textPrimary,
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout_outlined, color: ClayColors.textMuted),
+            icon: const Icon(Icons.logout_rounded, color: AppColors.textMuted),
             onPressed: _logout,
             tooltip: 'Logout',
           ),
         ],
       ),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [ClayColors.bgGradStart, ClayColors.bgGradMid, ClayColors.bgGradEnd],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
+        decoration: const BoxDecoration(gradient: AppColors.bgGradient),
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.accentPurple),
+              )
             : _errorMessage != null
                 ? Center(
                     child: Padding(
@@ -137,18 +130,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           Text(
                             _errorMessage!,
-                            style: GoogleFonts.dmSans(color: ClayColors.red, fontWeight: FontWeight.bold),
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                          const SizedBox(height: 12),
-                          ElevatedButton(
+                          const SizedBox(height: 14),
+                          ElevatedButton.icon(
                             onPressed: _loadInitialData,
-                            child: const Text('Retry Connection'),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry Connection'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentPurple,
+                            ),
                           ),
                         ],
                       ),
                     ),
                   )
-                : screens[_currentIndex],
+                : IndexedStack(
+                    index: _currentIndex,
+                    children: screens,
+                  ),
       ),
       bottomNavigationBar: _buildBottomNavBar(),
     );
@@ -157,27 +160,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildHomeTab() {
     final stats = _dashboardData?['stats'] ?? {};
     final upcomingDues = _dashboardData?['upcomingDues'] ?? [];
-    final recentPayments = _dashboardData?['recentPayments'] ?? _dashboardData?['recentTransactions'] ?? [];
+    final recentPayments =
+        _dashboardData?['recentPayments'] ?? _dashboardData?['recentTransactions'] ?? [];
 
-    final monthlyIncome = (stats['monthlyIncome'] ?? 0).toDouble();
-    final propertyCount = stats['propertyCount'] ?? 0;
-    final occupiedProps = stats['occupiedCount'] ?? 0;
+    final monthlyIncome = parseDouble(stats['monthlyIncome']);
+    final propertyCount = parseInt(stats['propertyCount']);
+    final occupiedProps = parseInt(stats['occupiedCount']);
     final vacantProps = propertyCount - occupiedProps;
-    final tenantCount = stats['tenantCount'] ?? 0;
-    final overdueCount = stats['overdueCount'] ?? 0;
+    final tenantCount = parseInt(stats['tenantCount']);
+    final overdueCount = parseInt(stats['overdueCount']);
 
     final upcomingDuesList = upcomingDues as List<dynamic>;
     final recentPaymentsList = recentPayments as List<dynamic>;
 
     final totalPending = upcomingDuesList.fold<double>(
       0.0,
-      (sum, item) => sum + ((item['amount'] ?? 0) as num).toDouble(),
+      (sum, item) => sum + parseDouble(item['amount']),
     );
 
     final String firstName = _user?['name']?.split(' ')[0] ?? 'User';
 
     return RefreshIndicator(
       onRefresh: _loadInitialData,
+      color: AppColors.accentPurple,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20.0),
@@ -185,73 +190,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Welcome Section
-            Text(
-              'Welcome back, $firstName 👋',
-              style: GoogleFonts.lora(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: ClayColors.textDark,
-              ),
-            ),
-            Text(
-              "Here is your portfolio overview for this month",
-              style: GoogleFonts.dmSans(
-                fontSize: 14,
-                color: ClayColors.textMuted,
-                fontWeight: FontWeight.w500,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Welcome back, $firstName 👋',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "Portfolio overview for this month",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                    gradient: AppColors.accentGradient,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      firstName.isNotEmpty ? firstName[0].toUpperCase() : 'U',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
 
-            // Horizontal Scrollable Cards
+            // Horizontal Scrollable Stat Cards
             SizedBox(
               height: 145,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 children: [
-                  // Total Rent Collected
-                  _buildStatCard(
-                    title: 'Total Collected',
+                  AnimatedStatCard(
+                    title: 'MONTHLY REVENUE',
                     value: _formatCurrency(monthlyIncome),
-                    subtext: 'Collected this month',
-                    icon: '🏦',
-                    cardColor: ClayColors.pastelOrange,
-                    iconColor: const Color(0xFFFDE68A),
-                    shadowColor: ClayColors.accent,
+                    subtitle: 'Collected this month',
+                    icon: Icons.account_balance_wallet,
+                    gradient: AppColors.greenGradient,
                   ),
-                  const SizedBox(width: 16),
-                  // Properties
-                  _buildStatCard(
-                    title: 'Properties',
+                  const SizedBox(width: 14),
+                  AnimatedStatCard(
+                    title: 'PROPERTIES',
                     value: '$propertyCount',
-                    subtext: '$occupiedProps occupied · $vacantProps vacant',
-                    icon: '🏠',
-                    cardColor: ClayColors.pastelGreen,
-                    iconColor: const Color(0xFFBBF7D0),
-                    shadowColor: ClayColors.green,
+                    subtitle: '$occupiedProps occupied · $vacantProps vacant',
+                    icon: Icons.domain,
+                    gradient: AppColors.accentGradient,
                   ),
-                  const SizedBox(width: 16),
-                  // Pending Dues
-                  _buildStatCard(
-                    title: 'Pending Dues',
+                  const SizedBox(width: 14),
+                  AnimatedStatCard(
+                    title: 'PENDING DUES',
                     value: _formatCurrency(totalPending),
-                    subtext: '▼ $overdueCount tenants overdue',
-                    icon: '⚠️',
-                    cardColor: ClayColors.pastelRed,
-                    iconColor: const Color(0xFFFECACA),
-                    shadowColor: ClayColors.red,
+                    subtitle: '$overdueCount tenants overdue',
+                    icon: Icons.warning_amber_rounded,
+                    gradient: AppColors.warmGradient,
                   ),
-                  const SizedBox(width: 16),
-                  // Active Tenants
-                  _buildStatCard(
-                    title: 'Active Tenants',
+                  const SizedBox(width: 14),
+                  AnimatedStatCard(
+                    title: 'ACTIVE TENANTS',
                     value: '$tenantCount',
-                    subtext: '▲ active in portfolio',
-                    icon: '👥',
-                    cardColor: ClayColors.pastelBlue,
-                    iconColor: const Color(0xFFBFDBFE),
-                    shadowColor: ClayColors.blue,
+                    subtitle: 'Active in portfolio',
+                    icon: Icons.people_alt,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF60A5FA)],
+                    ),
                   ),
                 ],
               ),
@@ -259,30 +283,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 28),
 
             // Upcoming Dues Section
-            Text(
-              'Upcoming Dues',
-              style: GoogleFonts.lora(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: ClayColors.textDark,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Upcoming Dues',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                StatusChip(status: '${upcomingDuesList.length} Dues'),
+              ],
             ),
             const SizedBox(height: 12),
             upcomingDuesList.isEmpty
-                ? _buildEmptyState('No upcoming dues.')
+                ? _buildEmptyState('No upcoming rent dues 🎉')
                 : ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: upcomingDuesList.length,
                     itemBuilder: (context, index) {
                       final item = upcomingDuesList[index];
-                      final amount = (item['amount'] ?? 0).toDouble();
-                      final dueDate = DateTime.parse(item['due_date']);
+                      final amount = parseDouble(item['amount']);
+                      final dueDate = parseDateTime(item['due_date']);
                       final dateStr = DateFormat('dd MMM yyyy').format(dueDate);
 
                       return _buildListItem(
                         title: item['property_name'] ?? 'Property',
-                        subtitle: 'Due date: $dateStr',
+                        subtitle: 'Due on $dateStr · ${item['tenant_name'] ?? 'Tenant'}',
                         amount: _formatCurrency(amount),
                         isPending: true,
                       );
@@ -291,30 +321,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 28),
 
             // Recent Collections
-            Text(
-              'Recent Collections',
-              style: GoogleFonts.lora(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: ClayColors.textDark,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Recent Collections',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                StatusChip(status: '${recentPaymentsList.length} Paid'),
+              ],
             ),
             const SizedBox(height: 12),
             recentPaymentsList.isEmpty
-                ? _buildEmptyState('No recent payments.')
+                ? _buildEmptyState('No payments logged recently.')
                 : ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: recentPaymentsList.length,
                     itemBuilder: (context, index) {
                       final item = recentPaymentsList[index];
-                      final amount = (item['amount'] ?? 0).toDouble();
-                      final payDate = DateTime.parse(item['payment_date']);
+                      final amount = parseDouble(item['amount']);
+                      final payDate = parseDateTime(item['payment_date'] ?? item['date_paid']);
                       final dateStr = DateFormat('dd MMM yyyy').format(payDate);
 
                       return _buildListItem(
                         title: item['tenant_name'] ?? 'Tenant',
-                        subtitle: 'Paid on $dateStr · ${item['property_name']}',
+                        subtitle: 'Paid on $dateStr · ${item['property_name'] ?? ''}',
                         amount: _formatCurrency(amount),
                         isPending: false,
                       );
@@ -326,95 +362,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required String subtext,
-    required String icon,
-    required Color cardColor,
-    required Color iconColor,
-    required Color shadowColor,
-  }) {
-    return ClayContainer(
-      width: 175,
-      color: cardColor,
-      shadowColor: shadowColor,
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              ClayContainer(
-                width: 38,
-                height: 38,
-                radius: 10,
-                color: iconColor,
-                depth: 3,
-                shadowColor: shadowColor,
-                child: Center(
-                  child: Text(icon, style: const TextStyle(fontSize: 18)),
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          Text(
-            title,
-            style: GoogleFonts.dmSans(
-              fontSize: 11,
-              color: ClayColors.textMuted,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: GoogleFonts.lora(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: ClayColors.textDark,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtext,
-            style: GoogleFonts.dmSans(
-              fontSize: 10,
-              color: ClayColors.textMuted,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildListItem({
     required String title,
     required String subtitle,
     required String amount,
     required bool isPending,
   }) {
-    return ClayContainer(
-      color: Colors.white,
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              color: isPending ? ClayColors.pastelRed : ClayColors.pastelGreen,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                isPending ? '⚠️' : '💸',
-                style: const TextStyle(fontSize: 18),
+              color: isPending ? AppColors.errorBg : AppColors.successBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: (isPending ? AppColors.error : AppColors.success).withOpacity(0.3),
               ),
+            ),
+            child: Icon(
+              isPending ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+              color: isPending ? AppColors.error : AppColors.success,
+              size: 20,
             ),
           ),
           const SizedBox(width: 14),
@@ -424,18 +396,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.dmSans(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: ClayColors.textDark,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: GoogleFonts.dmSans(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
-                    color: ClayColors.textMuted,
-                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
@@ -443,10 +415,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           Text(
             amount,
-            style: GoogleFonts.lora(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: isPending ? ClayColors.red : ClayColors.green,
+              fontWeight: FontWeight.w800,
+              color: isPending ? AppColors.error : AppColors.success,
             ),
           ),
         ],
@@ -455,15 +427,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildEmptyState(String message) {
-    return ClayContainer(
-      color: Colors.white,
+    return GlassCard(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       child: Center(
         child: Text(
           message,
-          style: GoogleFonts.dmSans(
-            color: ClayColors.textMuted,
+          style: GoogleFonts.plusJakartaSans(
+            color: AppColors.textMuted,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -472,159 +443,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _formatCurrency(double amt) {
-    final format = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+    final format = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    );
     return format.format(amt);
   }
 
   Widget _buildBottomNavBar() {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x0A000000),
-            offset: Offset(0, -4),
-            blurRadius: 10,
-          ),
-        ],
+      decoration: BoxDecoration(
+        color: AppColors.bgDark,
+        border: Border(top: BorderSide(color: AppColors.glassBorder)),
       ),
       child: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
-        backgroundColor: Colors.white,
-        selectedItemColor: ClayColors.accent,
-        unselectedItemColor: ClayColors.textMuted,
-        selectedLabelStyle: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 12),
-        unselectedLabelStyle: GoogleFonts.dmSans(fontWeight: FontWeight.w500, fontSize: 12),
+        backgroundColor: AppColors.bgDark,
+        selectedItemColor: AppColors.accentCyan,
+        unselectedItemColor: AppColors.textMuted,
+        type: BottomNavigationBarType.fixed,
+        selectedLabelStyle: GoogleFonts.plusJakartaSans(
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
+        unselectedLabelStyle: GoogleFonts.plusJakartaSans(
+          fontWeight: FontWeight.w500,
+          fontSize: 11,
+        ),
         elevation: 0,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard_outlined),
-            activeIcon: Icon(Icons.dashboard),
+            activeIcon: Icon(Icons.dashboard_rounded),
             label: 'Home',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.home_work_outlined),
-            activeIcon: Icon(Icons.home_work),
+            activeIcon: Icon(Icons.home_work_rounded),
             label: 'Properties',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.payments_outlined),
-            activeIcon: Icon(Icons.payments),
+            activeIcon: Icon(Icons.payments_rounded),
             label: 'Payments',
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawer() {
-    final String name = _user?['name'] ?? 'RentFlow User';
-    final String email = _user?['email'] ?? 'No Email';
-    final String role = _user?['role'] ?? 'landlord';
-
-    return Drawer(
-      backgroundColor: const Color(0xFFFAF7F2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [ClayColors.accent, ClayColors.accentLight],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                style: GoogleFonts.lora(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: ClayColors.accent,
-                ),
-              ),
-            ),
-            accountName: Text(
-              name,
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            accountEmail: Text(
-              '$email · ${role.toUpperCase()}',
-              style: GoogleFonts.dmSans(fontSize: 13, color: Colors.white.withOpacity(0.9)),
-            ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people_outline),
+            activeIcon: Icon(Icons.people_rounded),
+            label: 'Tenants',
           ),
-          ListTile(
-            leading: const Icon(Icons.dashboard_outlined, color: ClayColors.textDark),
-            title: Text('Dashboard', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
-            onTap: () {
-              Navigator.pop(context);
-              setState(() => _currentIndex = 0);
-            },
+          BottomNavigationBarItem(
+            icon: Icon(Icons.grid_view_outlined),
+            activeIcon: Icon(Icons.grid_view_rounded),
+            label: 'More',
           ),
-          ListTile(
-            leading: const Icon(Icons.home_work_outlined, color: ClayColors.textDark),
-            title: Text('Properties', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
-            onTap: () {
-              Navigator.pop(context);
-              setState(() => _currentIndex = 1);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.payments_outlined, color: ClayColors.textDark),
-            title: Text('Payments & Receipts', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
-            onTap: () {
-              Navigator.pop(context);
-              setState(() => _currentIndex = 2);
-            },
-          ),
-          const Divider(indent: 16, endIndent: 16),
-          ListTile(
-            leading: const Icon(Icons.people_outline, color: ClayColors.textDark),
-            title: Text('Tenants Directory', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const TenantsScreen()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.description_outlined, color: ClayColors.textDark),
-            title: Text('Lease Agreements', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AgreementsScreen()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.electrical_services_outlined, color: ClayColors.textDark),
-            title: Text('Shared Bills', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const BillsScreen()),
-              );
-            },
-          ),
-          const Spacer(),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: ClayColors.red),
-            title: Text('Logout', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, color: ClayColors.red)),
-            onTap: () {
-              Navigator.pop(context);
-              _logout();
-            },
-          ),
-          const SizedBox(height: 16),
         ],
       ),
     );

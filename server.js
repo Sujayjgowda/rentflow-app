@@ -142,6 +142,25 @@ initDB().then(() => {
     // Schedule: 00:05 daily to execute automated transaction rules
     cron.schedule('5 0 * * *', runActiveAutomations, { timezone: 'Asia/Kolkata' });
     console.log('📅 Cron scheduled: run transaction automations daily at 00:05');
+
+    // ========================================
+    // Keep-alive: ping self every 14 minutes
+    // Prevents Render free tier from sleeping
+    // ========================================
+    const RENDER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    cron.schedule('*/14 * * * *', async () => {
+        try {
+            const https = RENDER_URL.startsWith('https') ? require('https') : require('http');
+            https.get(`${RENDER_URL}/api/health`, (res) => {
+                console.log(`🏓 Keep-alive ping: ${res.statusCode}`);
+            }).on('error', (err) => {
+                console.warn('🏓 Keep-alive ping failed:', err.message);
+            });
+        } catch (err) {
+            console.warn('🏓 Keep-alive error:', err.message);
+        }
+    });
+    console.log(`🏓 Keep-alive scheduled: ping ${RENDER_URL}/api/health every 14 minutes`);
 }).catch(err => {
     console.error('Failed to initialize database:', err);
     process.exit(1);

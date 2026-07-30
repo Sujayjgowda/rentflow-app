@@ -1401,7 +1401,7 @@ async function renderAgreements() {
       <div class="agreement-grid">${agreements.map(ag => {
         const isImage = ag.file_type && ag.file_type.startsWith('image/');
         const isPdf = ag.file_type && ag.file_type.includes('pdf');
-        const previewUrl = `${SERVER_URL}${ag.file_path}`;
+        const previewUrl = ag.file_path.startsWith('http') ? ag.file_path : `${SERVER_URL}${ag.file_path}`;
         return `
         <div class="agreement-card">
           <div class="agreement-card-header">
@@ -2092,7 +2092,7 @@ function renderBillsTable(bills) {
         </thead>
         <tbody>
           ${bills.map(b => {
-            const fileUrl = b.file_path ? `${SERVER_URL}${b.file_path}` : null;
+            const fileUrl = b.file_path ? (b.file_path.startsWith('http') ? b.file_path : `${SERVER_URL}${b.file_path}`) : null;
             const statusClass = b.status === 'paid' ? 'paid' : 'overdue';
             return `
               <tr>

@@ -5,20 +5,11 @@ const path = require('path');
 const fs = require('fs');
 const { query } = require('../db');
 const { authenticate, requireRole } = require('../middleware/auth');
+const googleDrive = require('../services/googleDrive');
 
-const uploadDir = path.join(__dirname, '..', 'uploads');
-fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadDir),
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `advance_receipt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`);
-    }
-});
-
+// Use memory storage — files go to Google Drive, not disk
 const upload = multer({
-    storage,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     fileFilter: (req, file, cb) => {
         const allowed = ['.jpg', '.jpeg', '.png', '.pdf', '.webp'];
@@ -104,11 +95,24 @@ router.post('/', authenticate, requireRole('landlord'), upload.single('receipt')
         if (tenant.rows.length === 0) return res.status(404).json({ error: 'Tenant not found in this property' });
 
         const id = uuidv4();
-        const receipt_path = req.file ? `/uploads/${req.file.filename}` : null;
+        let receipt_path = null;
+        let drive_file_id = null;
+
+        // Upload receipt to Google Drive if provided
+        if (req.file) {
+            const driveResult = await googleDrive.uploadFile(
+                req.file.buffer,
+                req.file.originalname,
+                req.file.mimetype,
+                'receipts'
+            );
+            receipt_path = driveResult.viewLink;
+            drive_file_id = driveResult.fileId;
+        }
 
         await query(
-            'INSERT INTO advance_payments (id, property_id, tenant_id, amount, paid_date, notes, receipt_path, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-            [id, property_id, tenant_id, parseFloat(amount), paid_date, notes || null, receipt_path, req.user.id]
+            'INSERT INTO advance_payments (id, property_id, tenant_id, amount, paid_date, notes, receipt_path, created_by, drive_file_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+            [id, property_id, tenant_id, parseFloat(amount), paid_date, notes || null, receipt_path, req.user.id, drive_file_id]
         );
 
         await query('INSERT INTO activity_log (user_id, action, details) VALUES ($1, $2, $3)',
@@ -145,22 +149,41 @@ router.put('/:id', authenticate, requireRole('landlord'), upload.single('receipt
         const { amount, paid_date, notes } = req.body;
         
         let receipt_path = advance.receipt_path;
+        let drive_file_id = advance.drive_file_id;
+
         if (req.file) {
-            // Delete old file if exists
-            if (receipt_path) {
-                const oldPath = path.join(__dirname, '..', receipt_path);
+            // Delete old file from Drive if exists
+            if (advance.drive_file_id) {
+                try {
+                    await googleDrive.deleteFile(advance.drive_file_id);
+                } catch (driveErr) {
+                    console.warn('Warning: Could not delete old receipt from Drive:', driveErr.message);
+                }
+            } else if (advance.receipt_path && !advance.receipt_path.startsWith('http')) {
+                // Legacy local file cleanup
+                const oldPath = path.join(__dirname, '..', advance.receipt_path);
                 if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
             }
-            receipt_path = `/uploads/${req.file.filename}`;
+
+            // Upload new file to Drive
+            const driveResult = await googleDrive.uploadFile(
+                req.file.buffer,
+                req.file.originalname,
+                req.file.mimetype,
+                'receipts'
+            );
+            receipt_path = driveResult.viewLink;
+            drive_file_id = driveResult.fileId;
         }
 
         await query(
-            'UPDATE advance_payments SET amount = $1, paid_date = $2, notes = $3, receipt_path = $4 WHERE id = $5',
+            'UPDATE advance_payments SET amount = $1, paid_date = $2, notes = $3, receipt_path = $4, drive_file_id = $5 WHERE id = $6',
             [
                 amount !== undefined ? parseFloat(amount) : advance.amount,
                 paid_date || advance.paid_date,
                 notes !== undefined ? notes : advance.notes,
                 receipt_path,
+                drive_file_id,
                 req.params.id
             ]
         );
@@ -192,7 +215,16 @@ router.delete('/:id', authenticate, requireRole('landlord'), async (req, res) =>
         if (advResult.rows.length === 0) return res.status(404).json({ error: 'Advance payment not found' });
 
         const advance = advResult.rows[0];
-        if (advance.receipt_path) {
+
+        // Delete from Google Drive
+        if (advance.drive_file_id) {
+            try {
+                await googleDrive.deleteFile(advance.drive_file_id);
+            } catch (driveErr) {
+                console.warn('Warning: Could not delete receipt from Drive:', driveErr.message);
+            }
+        } else if (advance.receipt_path && !advance.receipt_path.startsWith('http')) {
+            // Legacy local file cleanup
             const filePath = path.join(__dirname, '..', advance.receipt_path);
             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }

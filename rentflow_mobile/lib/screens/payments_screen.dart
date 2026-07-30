@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../constants/colors.dart';
 import '../services/api_service.dart';
-import '../widgets/clay_container.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/glass_text_field.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/status_chip.dart';
+import '../utils/helpers.dart';
 
 class PaymentsScreen extends StatefulWidget {
-  const PaymentsScreen({Key? key}) : super(key: key);
+  const PaymentsScreen({super.key});
 
   @override
   State<PaymentsScreen> createState() => _PaymentsScreenState();
 }
 
-class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProviderStateMixin {
+class _PaymentsScreenState extends State<PaymentsScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<dynamic> _transactions = [];
   bool _isLoading = true;
   String? _errorMessage;
+  String _filterStatus = 'all'; // 'all', 'paid', 'pending', 'overdue'
 
   // Receipt Generator Fields
   final _tenantNameController = TextEditingController();
@@ -60,7 +67,21 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     }
   }
 
-  Future<void> _deleteTransaction(int id) async {
+  Future<void> _markPaid(dynamic id) async {
+    try {
+      await ApiService.markTransactionPaid(id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment marked as paid ✅')),
+      );
+      _fetchTransactions();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+      );
+    }
+  }
+
+  Future<void> _deleteTransaction(dynamic id) async {
     try {
       await ApiService.deleteTransaction(id);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -74,11 +95,41 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     }
   }
 
-  void _showAddTransactionDialog() {
-    final tenantNameController = TextEditingController();
-    final propertyNameController = TextEditingController();
+  void _sendWhatsAppReminder(String phone, String tenantName, String amount,
+      String propertyName, String dueDate) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final msg = Uri.encodeComponent(
+        "Hi $tenantName, a friendly reminder regarding the rent payment of ₹$amount for $propertyName, due on $dueDate. Please clear it at your earliest convenience. Thank you!");
+    final url = Uri.parse("https://wa.me/$cleanPhone?text=$msg");
+
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not launch WhatsApp')),
+      );
+    }
+  }
+
+  void _showAddTransactionDialog() async {
     final amountController = TextEditingController();
+    final dueDateController = TextEditingController(
+      text: DateTime.now().toIso8601String().split('T')[0],
+    );
+    final notesController = TextEditingController();
     String mode = 'UPI';
+
+    List<dynamic> properties = [];
+    List<dynamic> tenants = [];
+    String? selectedPropId;
+    String? selectedTenantId;
+
+    try {
+      properties = await ApiService.getProperties();
+      tenants = await ApiService.getTenants();
+    } catch (_) {}
+
+    if (!mounted) return;
 
     showModalBottomSheet(
       context: context,
@@ -89,11 +140,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
           builder: (context, setModalState) {
             return Container(
               decoration: const BoxDecoration(
-                color: Color(0xFFFAF7F2),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
+                color: AppColors.bgCard,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
               ),
               padding: EdgeInsets.only(
                 top: 24,
@@ -108,10 +156,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                   children: [
                     Center(
                       child: Container(
-                        width: 50,
-                        height: 5,
+                        width: 40,
+                        height: 4,
                         decoration: BoxDecoration(
-                          color: ClayColors.textMuted.withOpacity(0.3),
+                          color: AppColors.textMuted.withOpacity(0.4),
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
@@ -119,92 +167,166 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                     const SizedBox(height: 20),
                     Text(
                       'Add Payment Record',
-                      style: GoogleFonts.lora(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: ClayColors.textDark,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 20),
-                    _buildModalTextField(tenantNameController, 'Tenant Name', Icons.person_outline),
+
+                    // Property Selector Dropdown
+                    DropdownButtonFormField<String>(
+                      value: selectedPropId,
+                      dropdownColor: AppColors.surface,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Select Property',
+                        hintStyle: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textMuted,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.surfaceLight,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: AppColors.glassBorder),
+                        ),
+                      ),
+                      items: properties.map<DropdownMenuItem<String>>((p) {
+                        return DropdownMenuItem<String>(
+                          value: p['id'].toString(),
+                          child: Text(p['name'] ?? 'Property'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setModalState(() => selectedPropId = val);
+                      },
+                    ),
                     const SizedBox(height: 12),
-                    _buildModalTextField(propertyNameController, 'Property Name', Icons.business_outlined),
+
+                    // Tenant Selector Dropdown
+                    DropdownButtonFormField<String>(
+                      value: selectedTenantId,
+                      dropdownColor: AppColors.surface,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Select Tenant',
+                        hintStyle: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textMuted,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.surfaceLight,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: AppColors.glassBorder),
+                        ),
+                      ),
+                      items: tenants.map<DropdownMenuItem<String>>((t) {
+                        return DropdownMenuItem<String>(
+                          value: t['id'].toString(),
+                          child: Text(t['name'] ?? 'Tenant'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setModalState(() => selectedTenantId = val);
+                      },
+                    ),
                     const SizedBox(height: 12),
-                    _buildModalTextField(
-                      amountController,
-                      'Payment Amount (₹)',
-                      Icons.payments_outlined,
+
+                    GlassTextField(
+                      controller: amountController,
+                      hintText: 'Amount (₹)',
+                      prefixIcon: Icons.payments_outlined,
                       keyboardType: TextInputType.number,
                     ),
+                    const SizedBox(height: 12),
+
+                    GlassTextField(
+                      controller: dueDateController,
+                      hintText: 'Due Date (YYYY-MM-DD)',
+                      prefixIcon: Icons.calendar_month_outlined,
+                    ),
+                    const SizedBox(height: 12),
+
+                    GlassTextField(
+                      controller: notesController,
+                      hintText: 'Notes',
+                      prefixIcon: Icons.notes_outlined,
+                    ),
                     const SizedBox(height: 16),
+
                     Text(
                       'Payment Mode',
-                      style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.bold, color: ClayColors.textDark),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
+                    Wrap(
+                      spacing: 8.0,
                       children: ['UPI', 'Cash', 'Bank Transfer'].map((m) {
                         final isSel = mode == m;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: ChoiceChip(
-                            label: Text(m),
-                            selected: isSel,
-                            selectedColor: ClayColors.pastelOrange,
-                            labelStyle: GoogleFonts.dmSans(
-                              fontWeight: FontWeight.bold,
-                              color: isSel ? ClayColors.accent : ClayColors.textMuted,
-                            ),
-                            onSelected: (selected) {
-                              if (selected) {
-                                setModalState(() => mode = m);
-                              }
-                            },
+                        return ChoiceChip(
+                          label: Text(m),
+                          selected: isSel,
+                          selectedColor: AppColors.accentPurple,
+                          backgroundColor: AppColors.surfaceLight,
+                          labelStyle: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isSel ? Colors.white : AppColors.textMuted,
                           ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setModalState(() => mode = m);
+                            }
+                          },
                         );
                       }).toList(),
                     ),
                     const SizedBox(height: 24),
-                    ElevatedButton(
+
+                    GradientButton(
+                      text: 'Save Payment Record',
                       onPressed: () async {
-                        if (tenantNameController.text.isEmpty ||
-                            propertyNameController.text.isEmpty ||
+                        if (selectedPropId == null ||
                             amountController.text.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please fill all fields')),
+                            const SnackBar(
+                              content: Text('Please select property and enter amount'),
+                            ),
                           );
                           return;
                         }
 
                         try {
                           await ApiService.createTransaction({
-                            'tenant_name': tenantNameController.text.trim(),
-                            'property_name': propertyNameController.text.trim(),
+                            'property_id': selectedPropId,
+                            'tenant_id': selectedTenantId,
                             'amount': double.parse(amountController.text),
-                            'payment_mode': mode,
-                            'payment_date': DateTime.now().toIso8601String(),
+                            'due_date': dueDateController.text.trim(),
+                            'mode': mode,
+                            'status': 'pending',
+                            'notes': notesController.text.trim(),
                           });
                           Navigator.pop(context);
                           _fetchTransactions();
                         } catch (e) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                            SnackBar(
+                              content: Text(
+                                e.toString().replaceAll('Exception: ', ''),
+                              ),
+                            ),
                           );
                         }
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: ClayColors.accent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(50),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        'Save Payment',
-                        style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
                     ),
                   ],
                 ),
@@ -222,7 +344,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         _propertyNameController.text.isEmpty ||
         _rentAmountController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill the receipt details')),
+        const SnackBar(content: Text('Please fill all receipt details')),
       );
       return;
     }
@@ -250,40 +372,65 @@ Generated via RentFlow Mobile App
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
         title: Text(
           'Rent Receipt Generated',
-          style: GoogleFonts.lora(fontWeight: FontWeight.bold),
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
         ),
         content: Container(
           decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey[200]!),
+            color: AppColors.surfaceLight,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.glassBorder),
           ),
           padding: const EdgeInsets.all(12),
-          child: Text(
-            receiptText,
-            style: GoogleFonts.sourceCodePro(fontSize: 12),
+          child: SingleChildScrollView(
+            child: Text(
+              receiptText,
+              style: GoogleFonts.sourceCodePro(
+                fontSize: 12,
+                color: AppColors.textPrimary,
+              ),
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(
+              'Close',
+              style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Receipt text copied to clipboard!')),
+                const SnackBar(
+                  content: Text('Receipt text copied! Ready to share.'),
+                ),
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: ClayColors.accent, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentPurple,
+            ),
             child: const Text('Copy & Share'),
           ),
         ],
       ),
     );
+  }
+
+  String _formatCurrency(double amt) {
+    final format = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    );
+    return format.format(amt);
   }
 
   @override
@@ -296,26 +443,26 @@ Generated via RentFlow Mobile App
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.5),
+              color: AppColors.surfaceLight,
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.glassBorder),
             ),
             child: TabBar(
               controller: _tabController,
               indicator: BoxDecoration(
-                color: Colors.white,
+                gradient: AppColors.accentGradient,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x0A000000),
-                    offset: Offset(0, 4),
-                    blurRadius: 10,
-                  ),
-                ],
               ),
-              labelColor: ClayColors.accent,
-              unselectedLabelColor: ClayColors.textMuted,
-              labelStyle: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 14),
-              unselectedLabelStyle: GoogleFonts.dmSans(fontWeight: FontWeight.w500, fontSize: 14),
+              labelColor: Colors.white,
+              unselectedLabelColor: AppColors.textMuted,
+              labelStyle: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+              unselectedLabelStyle: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              ),
               tabs: const [
                 Tab(text: 'Transactions'),
                 Tab(text: 'Receipt Maker'),
@@ -325,276 +472,356 @@ Generated via RentFlow Mobile App
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildTransactionsTab(),
-                _buildReceiptMakerTab(),
-              ],
+              children: [_buildTransactionsTab(), _buildReceiptMakerTab()],
             ),
           ),
         ],
       ),
-      floatingActionButton: _tabController.index == 0
-          ? FloatingActionButton(
-              onPressed: _showAddTransactionDialog,
-              backgroundColor: ClayColors.accent,
-              child: const Icon(Icons.add, color: Colors.white),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddTransactionDialog,
+        backgroundColor: AppColors.accentPurple,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
     );
   }
 
   Widget _buildTransactionsTab() {
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : _errorMessage != null
-            ? Center(
-                child: Text(_errorMessage!, style: GoogleFonts.dmSans(color: ClayColors.red)),
-              )
-            : RefreshIndicator(
-                onRefresh: _fetchTransactions,
-                child: _transactions.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No transaction logs found.',
-                          style: GoogleFonts.dmSans(color: ClayColors.textMuted),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(20.0),
-                        itemCount: _transactions.length,
-                        itemBuilder: (context, index) {
-                          final tx = _transactions[index];
-                          final amount = (tx['amount'] ?? 0).toDouble();
-                          final date = DateTime.parse(tx['payment_date']);
-                          final dateStr = DateFormat('dd MMM yyyy').format(date);
+    List<dynamic> filtered = _transactions.where((t) {
+      final status = (t['status'] ?? 'pending').toString().toLowerCase();
+      if (_filterStatus == 'all') return true;
+      return status == _filterStatus;
+    }).toList();
 
-                          return ClayContainer(
-                            color: Colors.white,
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: const BoxDecoration(
-                                    color: ClayColors.pastelBlue,
-                                    shape: BoxShape.circle,
+    return Column(
+      children: [
+        // Status Filter Chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Row(
+            children: [
+              _buildFilterChip('all', 'All Logs'),
+              const SizedBox(width: 8),
+              _buildFilterChip('paid', 'Paid'),
+              const SizedBox(width: 8),
+              _buildFilterChip('pending', 'Pending'),
+              const SizedBox(width: 8),
+              _buildFilterChip('overdue', 'Overdue'),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.accentPurple),
+                )
+              : _errorMessage != null
+                  ? Center(
+                      child: Text(
+                        _errorMessage!,
+                        style: GoogleFonts.plusJakartaSans(color: AppColors.error),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _fetchTransactions,
+                      color: AppColors.accentPurple,
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.receipt_long_outlined,
+                                    size: 48,
+                                    color: AppColors.textMuted,
                                   ),
-                                  child: const Center(
-                                    child: Text('💳', style: TextStyle(fontSize: 18)),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No transaction records found.',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: AppColors.textMuted,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(20.0),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final tx = filtered[index];
+                                final amount = parseDouble(tx['amount']);
+                                final status =
+                                    (tx['status'] ?? 'pending').toString();
+                                final dateStr = tx['due_date'] ?? 'N/A';
+                                final tenantName =
+                                    tx['tenant_name'] ?? 'Tenant';
+                                final phone = tx['tenant_phone'] ?? '';
+                                final propName =
+                                    tx['property_name'] ?? 'Property';
+
+                                return GlassCard(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(16),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        tx['tenant_name'] ?? 'Tenant',
-                                        style: GoogleFonts.dmSans(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.bold,
-                                          color: ClayColors.textDark,
-                                        ),
+                                      Row(
+                                        children: [
+                                          Container(
+                                            width: 42,
+                                            height: 42,
+                                            decoration: BoxDecoration(
+                                              gradient: status == 'paid'
+                                                  ? AppColors.greenGradient
+                                                  : AppColors.warmGradient,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(
+                                              status == 'paid'
+                                                  ? Icons.check_circle_outline
+                                                  : Icons.hourglass_top_rounded,
+                                              color: Colors.white,
+                                              size: 22,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  tenantName,
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppColors.textPrimary,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '$propName · Due $dateStr',
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    fontSize: 12,
+                                                    color: AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                _formatCurrency(amount),
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: status == 'paid'
+                                                      ? AppColors.success
+                                                      : AppColors.error,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              StatusChip(status: status),
+                                            ],
+                                          ),
+                                        ],
                                       ),
-                                      Text(
-                                        'Paid on $dateStr · ${tx['property_name']}',
-                                        style: GoogleFonts.dmSans(
-                                          fontSize: 12,
-                                          color: ClayColors.textMuted,
-                                          fontWeight: FontWeight.w500,
+                                      if (status != 'paid') ...[
+                                        const SizedBox(height: 12),
+                                        const Divider(),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: [
+                                            if (phone.isNotEmpty)
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.chat_bubble_outline,
+                                                  color: Color(0xFF25D366),
+                                                  size: 20,
+                                                ),
+                                                tooltip: 'WhatsApp Reminder',
+                                                onPressed: () =>
+                                                    _sendWhatsAppReminder(
+                                                  phone,
+                                                  tenantName,
+                                                  amount.toStringAsFixed(0),
+                                                  propName,
+                                                  dateStr,
+                                                ),
+                                              ),
+                                            TextButton.icon(
+                                              onPressed: () => _markPaid(tx['id']),
+                                              icon: const Icon(
+                                                Icons.check_circle,
+                                                size: 16,
+                                                color: AppColors.success,
+                                              ),
+                                              label: Text(
+                                                'Mark Paid',
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppColors.success,
+                                                ),
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete_outline,
+                                                color: AppColors.textMuted,
+                                                size: 18,
+                                              ),
+                                              onPressed: () =>
+                                                  _deleteTransaction(tx['id']),
+                                            ),
+                                          ],
                                         ),
-                                      ),
+                                      ],
                                     ],
                                   ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      _formatCurrency(amount),
-                                      style: GoogleFonts.lora(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: ClayColors.green,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[100],
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        tx['payment_mode'] ?? 'UPI',
-                                        style: GoogleFonts.dmSans(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: ClayColors.textMuted,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: ClayColors.textMuted, size: 20),
-                                  onPressed: () => _deleteTransaction(tx['id']),
-                                ),
-                              ],
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
-              );
+                  ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip(String key, String label) {
+    final isSelected = _filterStatus == key;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      selectedColor: AppColors.accentPurple,
+      backgroundColor: AppColors.surfaceLight,
+      labelStyle: GoogleFonts.plusJakartaSans(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: isSelected ? Colors.white : AppColors.textMuted,
+      ),
+      onSelected: (val) {
+        if (val) setState(() => _filterStatus = key);
+      },
+    );
   }
 
   Widget _buildReceiptMakerTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
-      child: ClayContainer(
-        color: Colors.white,
+      child: GlassCard(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               'Rent Receipt Maker',
-              style: GoogleFonts.lora(fontSize: 18, fontWeight: FontWeight.bold, color: ClayColors.textDark),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
-              'Easily create and share rent receipts for tax saving purposes.',
-              style: GoogleFonts.dmSans(fontSize: 12, color: ClayColors.textMuted),
+              'Generate rent receipts for HRA tax exemption proof.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 20),
-            _buildModalTextField(_tenantNameController, 'Tenant Name', Icons.person_outline),
+            GlassTextField(
+              controller: _tenantNameController,
+              hintText: 'Tenant Name',
+              prefixIcon: Icons.person_outline,
+            ),
             const SizedBox(height: 12),
-            _buildModalTextField(_landlordNameController, 'Landlord Name', Icons.person_outline),
+            GlassTextField(
+              controller: _landlordNameController,
+              hintText: 'Landlord Name',
+              prefixIcon: Icons.person_outline,
+            ),
             const SizedBox(height: 12),
-            _buildModalTextField(_propertyNameController, 'Property details (e.g. House No. 44)', Icons.location_on_outlined),
+            GlassTextField(
+              controller: _propertyNameController,
+              hintText: 'Property Address (e.g. Flat 302, Green Glen)',
+              prefixIcon: Icons.location_on_outlined,
+            ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildModalTextField(
-                    _rentAmountController,
-                    'Rent Paid (₹)',
-                    Icons.payments_outlined,
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-              ],
+            GlassTextField(
+              controller: _rentAmountController,
+              hintText: 'Monthly Rent Paid (₹)',
+              prefixIcon: Icons.payments_outlined,
+              keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
-                  child: _buildModalTextField(_periodStartController, 'Period Start (e.g. Oct 2026)', Icons.calendar_month_outlined),
+                  child: GlassTextField(
+                    controller: _periodStartController,
+                    hintText: 'Start (Oct 2026)',
+                    prefixIcon: Icons.calendar_month_outlined,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildModalTextField(_periodEndController, 'Period End (e.g. Dec 2026)', Icons.calendar_month_outlined),
+                  child: GlassTextField(
+                    controller: _periodEndController,
+                    hintText: 'End (Dec 2026)',
+                    prefixIcon: Icons.calendar_month_outlined,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             Text(
               'Payment Mode',
-              style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.bold, color: ClayColors.textDark),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 8.0,
               children: ['UPI', 'Cash', 'Cheque', 'Net Banking'].map((m) {
                 final isSel = _paymentMode == m;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6.0),
-                  child: ChoiceChip(
-                    label: Text(m),
-                    selected: isSel,
-                    selectedColor: ClayColors.pastelOrange,
-                    labelStyle: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isSel ? ClayColors.accent : ClayColors.textMuted,
-                    ),
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() => _paymentMode = m);
-                      }
-                    },
+                return ChoiceChip(
+                  label: Text(m),
+                  selected: isSel,
+                  selectedColor: AppColors.accentPurple,
+                  backgroundColor: AppColors.surfaceLight,
+                  labelStyle: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isSel ? Colors.white : AppColors.textMuted,
                   ),
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() => _paymentMode = m);
+                    }
+                  },
                 );
               }).toList(),
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
+            GradientButton(
+              text: 'Generate & Copy Receipt',
+              icon: Icons.picture_as_pdf,
               onPressed: _generateAndShareReceipt,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ClayColors.accent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(50),
-                ),
-                elevation: 0,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.picture_as_pdf, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Generate Receipt',
-                    style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildModalTextField(
-    TextEditingController controller,
-    String hint,
-    IconData icon, {
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x05000000),
-            offset: Offset(1, 2),
-            blurRadius: 4,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: GoogleFonts.dmSans(color: ClayColors.textDark),
-        decoration: InputDecoration(
-          icon: Icon(icon, color: ClayColors.textMuted, size: 20),
-          hintText: hint,
-          hintStyle: GoogleFonts.dmSans(color: ClayColors.textMuted, fontSize: 14),
-          border: InputBorder.none,
-        ),
-      ),
-    );
-  }
-
-  String _formatCurrency(double amt) {
-    final format = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
-    return format.format(amt);
   }
 }
