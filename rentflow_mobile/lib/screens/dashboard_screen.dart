@@ -187,7 +187,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final recentPayments =
         _dashboardData?['recentPayments'] ?? _dashboardData?['recentTransactions'] ?? [];
 
+    final isLandlord = (_user?['role'] ?? 'landlord') == 'landlord';
     final monthlyIncome = parseDouble(stats['monthlyIncome']);
+    final totalPaid = parseDouble(stats['totalPaid']);
+    final pendingAmount = parseDouble(stats['pendingAmount']);
+    final activeLeaseCount = parseInt(stats['activeLeaseCount']);
     final propertyCount = parseInt(stats['propertyCount']);
     final occupiedProps = parseInt(stats['occupiedCount']);
     final vacantProps = propertyCount - occupiedProps;
@@ -220,17 +224,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Welcome back, $firstName 👋',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            'Welcome back, $firstName 👋',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isLandlord ? AppColors.accentPurple.withOpacity(0.12) : AppColors.accentCyan.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              isLandlord ? 'LANDLORD' : 'TENANT',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: isLandlord ? AppColors.accentPurple : AppColors.accentCyan,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        "Portfolio overview for this month",
+                        isLandlord
+                            ? "Portfolio overview for this month"
+                            : "My rental overview for this month",
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 13,
                           color: AppColors.textSecondary,
@@ -267,41 +293,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
-                children: [
-                  AnimatedStatCard(
-                    title: 'MONTHLY REVENUE',
-                    value: _formatCurrency(monthlyIncome),
-                    subtitle: 'Collected this month',
-                    icon: Icons.account_balance_wallet,
-                    gradient: AppColors.greenGradient,
-                  ),
-                  const SizedBox(width: 14),
-                  AnimatedStatCard(
-                    title: 'PROPERTIES',
-                    value: '$propertyCount',
-                    subtitle: '$occupiedProps occupied · $vacantProps vacant',
-                    icon: Icons.domain,
-                    gradient: AppColors.accentGradient,
-                  ),
-                  const SizedBox(width: 14),
-                  AnimatedStatCard(
-                    title: 'PENDING DUES',
-                    value: _formatCurrency(totalPending),
-                    subtitle: '$overdueCount tenants overdue',
-                    icon: Icons.warning_amber_rounded,
-                    gradient: AppColors.warmGradient,
-                  ),
-                  const SizedBox(width: 14),
-                  AnimatedStatCard(
-                    title: 'ACTIVE TENANTS',
-                    value: '$tenantCount',
-                    subtitle: 'Active in portfolio',
-                    icon: Icons.people_alt,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF3B82F6), Color(0xFF60A5FA)],
-                    ),
-                  ),
-                ],
+                children: isLandlord
+                    ? [
+                        AnimatedStatCard(
+                          title: 'MONTHLY REVENUE',
+                          value: _formatCurrency(monthlyIncome),
+                          subtitle: 'Collected this month',
+                          icon: Icons.account_balance_wallet,
+                          gradient: AppColors.greenGradient,
+                        ),
+                        const SizedBox(width: 14),
+                        AnimatedStatCard(
+                          title: 'PROPERTIES',
+                          value: '$propertyCount',
+                          subtitle: '$occupiedProps occupied · $vacantProps vacant',
+                          icon: Icons.domain,
+                          gradient: AppColors.accentGradient,
+                        ),
+                        const SizedBox(width: 14),
+                        AnimatedStatCard(
+                          title: 'PENDING DUES',
+                          value: _formatCurrency(totalPending),
+                          subtitle: '$overdueCount tenants overdue',
+                          icon: Icons.warning_amber_rounded,
+                          gradient: AppColors.warmGradient,
+                        ),
+                        const SizedBox(width: 14),
+                        AnimatedStatCard(
+                          title: 'ACTIVE TENANTS',
+                          value: '$tenantCount',
+                          subtitle: 'Active in portfolio',
+                          icon: Icons.people_alt,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF3B82F6), Color(0xFF60A5FA)],
+                          ),
+                        ),
+                      ]
+                    : [
+                        AnimatedStatCard(
+                          title: 'TOTAL PAID',
+                          value: _formatCurrency(totalPaid),
+                          subtitle: 'Total rent & bills paid',
+                          icon: Icons.check_circle_outline,
+                          gradient: AppColors.greenGradient,
+                        ),
+                        const SizedBox(width: 14),
+                        AnimatedStatCard(
+                          title: 'PENDING DUES',
+                          value: _formatCurrency(pendingAmount),
+                          subtitle: 'Outstanding this month',
+                          icon: Icons.warning_amber_rounded,
+                          gradient: AppColors.warmGradient,
+                        ),
+                        const SizedBox(width: 14),
+                        AnimatedStatCard(
+                          title: 'ACTIVE LEASES',
+                          value: '$activeLeaseCount',
+                          subtitle: 'Rented property units',
+                          icon: Icons.home_work_outlined,
+                          gradient: AppColors.accentGradient,
+                        ),
+                      ],
               ),
             ),
             const SizedBox(height: 28),
@@ -361,6 +413,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     subtitle: '$tenantName · Due $dateStr',
                     amount: _formatCurrency(amount),
                     isPaid: false,
+                    isLandlord: isLandlord,
                     phone: phone,
                     tenantName: tenantName,
                     propertyName: propertyName,
@@ -426,6 +479,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String subtitle,
     required String amount,
     required bool isPaid,
+    bool isLandlord = true,
     String phone = '',
     String tenantName = '',
     String propertyName = '',
@@ -540,7 +594,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Icon(Icons.chat, color: const Color(0xFF25D366), size: 16),
                           const SizedBox(width: 6),
                           Text(
-                            'WhatsApp Reminder',
+                            isLandlord ? 'WhatsApp Reminder' : 'Contact Landlord',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
