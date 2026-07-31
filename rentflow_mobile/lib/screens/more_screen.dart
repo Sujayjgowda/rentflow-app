@@ -50,7 +50,7 @@ class _MoreScreenState extends State<MoreScreen> {
     final role = (_user?['role'] ?? 'landlord').toString().toUpperCase();
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.white,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -213,7 +213,7 @@ class _MoreScreenState extends State<MoreScreen> {
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(
-                    backgroundColor: AppColors.surface,
+                    backgroundColor: Colors.white,
                     title: Text(
                       'Logout',
                       style: GoogleFonts.plusJakartaSans(

@@ -62,10 +62,8 @@ class _AgreementsScreenState extends State<AgreementsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(gradient: AppColors.bgGradient),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
+    return Scaffold(
+        backgroundColor: Colors.white,
         appBar: AppBar(
           title: Text(
             'Lease Agreements',
@@ -190,7 +188,6 @@ class _AgreementsScreenState extends State<AgreementsScreen> {
                             },
                           ),
                   ),
-      ),
     );
   }
 }

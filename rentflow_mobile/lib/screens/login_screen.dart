@@ -8,8 +8,6 @@ import '../widgets/glass_text_field.dart';
 import '../widgets/gradient_button.dart';
 import 'dashboard_screen.dart';
 
-import '../widgets/glass_scaffold.dart';
-
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -140,9 +138,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return GlassScaffold(
-      body: Center(
-        child: SingleChildScrollView(
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
               padding:
                   const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
               child: Column(
@@ -159,9 +159,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       border: Border.all(color: AppColors.glassBorder),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.accentPurple.withOpacity(0.3),
-                          blurRadius: 24,
-                          spreadRadius: 2,
+                          color: AppColors.accentPurple.withOpacity(0.12),
+                          blurRadius: 20,
+                          spreadRadius: 0,
                         ),
                       ],
                     ),
@@ -399,8 +399,9 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-        );
-      }
+        ),
+      );
+    }
 
   Widget _buildRoleCard({
     required String role,

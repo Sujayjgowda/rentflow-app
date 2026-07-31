@@ -74,7 +74,7 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
       builder: (context) {
         return Container(
           decoration: const BoxDecoration(
-            color: AppColors.bgCard,
+            color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
           ),
           padding: EdgeInsets.only(
@@ -188,7 +188,7 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.white,
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.accentPurple),

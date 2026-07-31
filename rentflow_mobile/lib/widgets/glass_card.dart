@@ -1,9 +1,7 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../constants/colors.dart';
 
-/// True glassmorphic container widget with BackdropFilter blur, top-left specular
-/// highlight border, and semi-transparent frosted fill layer.
+/// Clean elevated white card — replaces the old glassmorphic card.
 class GlassCard extends StatelessWidget {
   final Widget? child;
   final double borderRadius;
@@ -11,23 +9,23 @@ class GlassCard extends StatelessWidget {
   final EdgeInsetsGeometry? margin;
   final double? width;
   final double? height;
-  final double blurIntensity;
+  final double blurIntensity; // ignored, kept for API compat
   final Color? backgroundColor;
-  final double opacity;
+  final double opacity; // ignored, kept for API compat
   final VoidCallback? onTap;
   final Border? border;
 
   const GlassCard({
     super.key,
     this.child,
-    this.borderRadius = 22.0,
+    this.borderRadius = 16.0,
     this.padding,
     this.margin,
     this.width,
     this.height,
-    this.blurIntensity = 16.0,
+    this.blurIntensity = 0,
     this.backgroundColor,
-    this.opacity = 0.12,
+    this.opacity = 1.0,
     this.onTap,
     this.border,
   });
@@ -38,62 +36,31 @@ class GlassCard extends StatelessWidget {
       width: width,
       height: height,
       margin: margin,
+      padding: padding,
       decoration: BoxDecoration(
+        color: backgroundColor ?? Colors.white,
         borderRadius: BorderRadius.circular(borderRadius),
+        border: border ??
+            Border.all(
+              color: AppColors.glassBorder,
+              width: 1,
+            ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.35),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-            spreadRadius: -4,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+            spreadRadius: 0,
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: Stack(
-          children: [
-            // 1. Frosted Glass Backdrop Blur (blurs light/orbs directly behind the card)
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: blurIntensity,
-                  sigmaY: blurIntensity,
-                ),
-                child: const SizedBox.expand(),
-              ),
-            ),
-
-            // 2. Translucent Glass Tint & Specular Top-Left Highlight Border
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(borderRadius),
-                  border: border ??
-                      Border.all(
-                        color: Colors.white.withOpacity(0.20),
-                        width: 1.2,
-                      ),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      (backgroundColor ?? Colors.white).withOpacity(opacity + 0.08),
-                      (backgroundColor ?? Colors.white).withOpacity(opacity * 0.3),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // 3. Child Content
-            Padding(
-              padding: padding ?? EdgeInsets.zero,
-              child: child,
-            ),
-          ],
-        ),
-      ),
+      child: child,
     );
 
     if (onTap != null) {

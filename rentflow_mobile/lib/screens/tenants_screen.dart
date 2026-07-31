@@ -99,7 +99,7 @@ class _TenantsScreenState extends State<TenantsScreen> {
           builder: (context, setModalState) {
             return Container(
               decoration: const BoxDecoration(
-                color: AppColors.bgCard,
+                color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
               ),
               padding: EdgeInsets.only(
@@ -137,7 +137,7 @@ class _TenantsScreenState extends State<TenantsScreen> {
                     // Property Selector Dropdown
                     DropdownButtonFormField<String>(
                       value: selectedPropId,
-                      dropdownColor: AppColors.surface,
+                      dropdownColor: Colors.white,
                       style: GoogleFonts.plusJakartaSans(
                         color: AppColors.textPrimary,
                       ),
@@ -260,7 +260,7 @@ class _TenantsScreenState extends State<TenantsScreen> {
     final isLandlord = (_user?['role'] ?? 'landlord') == 'landlord';
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.white,
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.accentPurple),

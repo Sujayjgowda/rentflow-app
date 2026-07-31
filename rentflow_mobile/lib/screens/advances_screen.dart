@@ -91,7 +91,7 @@ class _AdvancesScreenState extends State<AdvancesScreen> {
           builder: (context, setModalState) {
             return Container(
               decoration: const BoxDecoration(
-                color: AppColors.bgCard,
+                color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
               ),
               padding: EdgeInsets.only(
@@ -129,7 +129,7 @@ class _AdvancesScreenState extends State<AdvancesScreen> {
                     // Property Selector Dropdown
                     DropdownButtonFormField<String>(
                       value: selectedPropId,
-                      dropdownColor: AppColors.surface,
+                      dropdownColor: Colors.white,
                       style: GoogleFonts.plusJakartaSans(
                         color: AppColors.textPrimary,
                       ),
@@ -160,7 +160,7 @@ class _AdvancesScreenState extends State<AdvancesScreen> {
                     // Tenant Selector Dropdown
                     DropdownButtonFormField<String>(
                       value: selectedTenantId,
-                      dropdownColor: AppColors.surface,
+                      dropdownColor: Colors.white,
                       style: GoogleFonts.plusJakartaSans(
                         color: AppColors.textPrimary,
                       ),
@@ -268,10 +268,8 @@ class _AdvancesScreenState extends State<AdvancesScreen> {
   Widget build(BuildContext context) {
     final isLandlord = (_user?['role'] ?? 'landlord') == 'landlord';
 
-    return Container(
-      decoration: const BoxDecoration(gradient: AppColors.bgGradient),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
+    return Scaffold(
+        backgroundColor: Colors.white,
         appBar: AppBar(
           title: Text(
             'Security Advances',
@@ -425,7 +423,6 @@ class _AdvancesScreenState extends State<AdvancesScreen> {
                 child: const Icon(Icons.add, color: Colors.white),
               )
             : null,
-      ),
     );
   }
 }

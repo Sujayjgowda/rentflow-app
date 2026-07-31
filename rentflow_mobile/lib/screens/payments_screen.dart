@@ -140,7 +140,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           builder: (context, setModalState) {
             return Container(
               decoration: const BoxDecoration(
-                color: AppColors.bgCard,
+                color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
               ),
               padding: EdgeInsets.only(
@@ -178,7 +178,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                     // Property Selector Dropdown
                     DropdownButtonFormField<String>(
                       value: selectedPropId,
-                      dropdownColor: AppColors.surface,
+                      dropdownColor: Colors.white,
                       style: GoogleFonts.plusJakartaSans(
                         color: AppColors.textPrimary,
                       ),
@@ -209,7 +209,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                     // Tenant Selector Dropdown
                     DropdownButtonFormField<String>(
                       value: selectedTenantId,
-                      dropdownColor: AppColors.surface,
+                      dropdownColor: Colors.white,
                       style: GoogleFonts.plusJakartaSans(
                         color: AppColors.textPrimary,
                       ),
@@ -436,7 +436,7 @@ Generated via RentFlow Mobile App
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.white,
       body: Column(
         children: [
           // Tab selection header
