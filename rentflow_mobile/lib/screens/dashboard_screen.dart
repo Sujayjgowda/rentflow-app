@@ -13,6 +13,8 @@ import 'payments_screen.dart';
 import 'tenants_screen.dart';
 import 'more_screen.dart';
 
+import '../widgets/glass_scaffold.dart';
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -79,8 +81,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final titles = ['RentFlow', 'Properties', 'Payments', 'Tenants', 'More Options'];
 
-    return Scaffold(
-      backgroundColor: AppColors.bgDark,
+    return GlassScaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -115,29 +116,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.bgGradient),
-        child: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: AppColors.accentPurple),
-              )
-            : _errorMessage != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _errorMessage!,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: AppColors.error,
-                              fontWeight: FontWeight.w700,
-                            ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accentPurple),
+            )
+          : _errorMessage != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _errorMessage!,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w700,
                           ),
-                          const SizedBox(height: 14),
-                          ElevatedButton.icon(
-                            onPressed: _loadInitialData,
+                        ),
+                        const SizedBox(height: 14),
+                        ElevatedButton.icon(
+                          onPressed: _loadInitialData,
                             icon: const Icon(Icons.refresh),
                             label: const Text('Retry Connection'),
                             style: ElevatedButton.styleFrom(
@@ -152,7 +151,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     index: _currentIndex,
                     children: screens,
                   ),
-      ),
       bottomNavigationBar: _buildBottomNavBar(),
     );
   }
