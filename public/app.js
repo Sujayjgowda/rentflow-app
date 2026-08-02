@@ -495,8 +495,8 @@ async function renderDashboard() {
       // 5. Recent Activity
       const activityItemsHtml = (data.recentActivity || []).slice(0, 3).map((act, idx, arr) => {
         let dotColor = 'var(--text-muted)';
-        const action = act.action || '';
-        const details = act.details || '';
+        const action = act.action || act.type || '';
+        const details = act.details || act.description || '';
         if (action.includes('pay') || action.includes('receipt') || details.toLowerCase().includes('paid') || details.toLowerCase().includes('received')) {
           dotColor = 'var(--green)';
         } else if (action.includes('reminder') || action.includes('warning') || action.includes('delete') || action.includes('pause')) {
