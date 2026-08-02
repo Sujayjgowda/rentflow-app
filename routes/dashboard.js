@@ -20,6 +20,13 @@ router.get('/landlord', authenticate, async (req, res) => {
             WHERE p.owner_id = $1 AND t.is_active = 1
         `, [userId])).rows[0].count;
 
+    // Occupancy: occupied = properties with active tenants
+    const occupiedCount = (await query(`
+            SELECT COUNT(DISTINCT p.id) as count FROM properties p
+            JOIN tenants t ON t.property_id = p.id
+            WHERE p.owner_id = $1 AND p.is_active = 1 AND t.is_active = 1
+        `, [userId])).rows[0].count;
+
     const now = new Date();
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-31`;
@@ -48,6 +55,47 @@ router.get('/landlord', authenticate, async (req, res) => {
             WHERE p.owner_id = $1 AND tr.status = 'pending'
         `, [userId])).rows[0].count;
 
+    const pendingAmount = (await query(`
+            SELECT COALESCE(SUM(tr.amount), 0) as total
+            FROM transactions tr JOIN properties p ON tr.property_id = p.id
+            WHERE p.owner_id = $1 AND tr.status IN ('pending', 'overdue')
+        `, [userId])).rows[0].total;
+
+    // Monthly collection history (last 6 months)
+    const monthlyCollection = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+      const mEnd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-31`;
+      const monthName = d.toLocaleString('default', { month: 'short' });
+
+      const collected = (await query(`
+              SELECT COALESCE(SUM(tr.amount), 0) as total
+              FROM transactions tr JOIN properties p ON tr.property_id = p.id
+              WHERE p.owner_id = $1 AND tr.status = 'paid' AND tr.due_date BETWEEN $2 AND $3
+          `, [userId, mStart, mEnd])).rows[0].total;
+
+      const pending = (await query(`
+              SELECT COALESCE(SUM(tr.amount), 0) as total
+              FROM transactions tr JOIN properties p ON tr.property_id = p.id
+              WHERE p.owner_id = $1 AND tr.status IN ('pending', 'overdue') AND tr.due_date BETWEEN $2 AND $3
+          `, [userId, mStart, mEnd])).rows[0].total;
+
+      monthlyCollection.push({ month: monthName, collected: Number(collected), pending: Number(pending) });
+    }
+
+    // Tenant status (this month's collection per tenant)
+    const tenantStatus = (await query(`
+            SELECT ten.name as tenant_name, p.name as property_name, ten.phone,
+              COALESCE(SUM(CASE WHEN tr.status = 'paid' AND tr.due_date BETWEEN $2 AND $3 THEN tr.amount ELSE 0 END), 0) as paid_amount,
+              COALESCE(SUM(CASE WHEN tr.status IN ('pending', 'overdue') AND tr.due_date BETWEEN $2 AND $3 THEN tr.amount ELSE 0 END), 0) as due_amount
+            FROM tenants ten
+            JOIN properties p ON ten.property_id = p.id
+            LEFT JOIN transactions tr ON tr.tenant_id = ten.id
+            WHERE p.owner_id = $1 AND ten.is_active = 1
+            GROUP BY ten.id, ten.name, p.name, ten.phone
+        `, [userId, monthStart, monthEnd])).rows;
+
     const recentTransactions = (await query(`
             SELECT tr.*, p.name as property_name, ten.name as tenant_name
             FROM transactions tr
@@ -66,7 +114,7 @@ router.get('/landlord', authenticate, async (req, res) => {
     const today = now.toISOString().split('T')[0];
     const thirtyDaysLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const upcomingDues = (await query(`
-            SELECT tr.*, p.name as property_name, ten.name as tenant_name
+            SELECT tr.*, p.name as property_name, ten.name as tenant_name, ten.phone as tenant_phone
             FROM transactions tr
             JOIN properties p ON tr.property_id = p.id
             LEFT JOIN tenants ten ON tr.tenant_id = ten.id
@@ -76,7 +124,9 @@ router.get('/landlord', authenticate, async (req, res) => {
         `, [userId, today, thirtyDaysLater])).rows;
 
     res.json({
-      stats: { propertyCount, tenantCount, monthlyIncome, totalCollected, overdueCount, pendingCount },
+      stats: { propertyCount, tenantCount, monthlyIncome, totalCollected, overdueCount, pendingCount, occupiedCount: Number(occupiedCount), pendingAmount: Number(pendingAmount) },
+      monthlyCollection,
+      tenantStatus,
       recentTransactions,
       recentActivity,
       upcomingDues
