@@ -106,9 +106,111 @@ router.get('/landlord', authenticate, async (req, res) => {
             LIMIT 10
         `, [userId])).rows;
 
-    const recentActivity = (await query(`
-            SELECT * FROM activity_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10
+    // Build structured Recent Activity from transactions + bills
+    // 1. Recent rent transactions (paid)
+    const paidTransactions = (await query(`
+            SELECT tr.amount, tr.due_date, tr.date_paid, tr.status, tr.created_at,
+                   p.name as property_name, ten.name as tenant_name
+            FROM transactions tr
+            JOIN properties p ON tr.property_id = p.id
+            LEFT JOIN tenants ten ON tr.tenant_id = ten.id
+            WHERE p.owner_id = $1
+            ORDER BY tr.created_at DESC
+            LIMIT 10
         `, [userId])).rows;
+
+    // 2. Recent shared bills
+    const recentBills = (await query(`
+            SELECT sb.bill_name, sb.total_amount, sb.tenant_share, sb.due_date, sb.status, sb.created_at,
+                   p.name as property_name, ten.name as tenant_name
+            FROM shared_bills sb
+            JOIN properties p ON sb.property_id = p.id
+            LEFT JOIN tenants ten ON sb.tenant_id = ten.id
+            WHERE p.owner_id = $1
+            ORDER BY sb.created_at DESC
+            LIMIT 10
+        `, [userId])).rows;
+
+    // 3. Recent automations
+    const recentAutomations = (await query(`
+            SELECT ta.amount, ta.start_date, ta.num_months, ta.created_at,
+                   p.name as property_name, ten.name as tenant_name
+            FROM transaction_automations ta
+            JOIN properties p ON ta.property_id = p.id
+            LEFT JOIN tenants ten ON ta.tenant_id = ten.id
+            WHERE p.owner_id = $1
+            ORDER BY ta.created_at DESC
+            LIMIT 5
+        `, [userId])).rows;
+
+    // Format into standardized activity items
+    const recentActivity = [];
+
+    for (const tr of paidTransactions) {
+      const tenantName = tr.tenant_name || 'Tenant';
+      const amount = Number(tr.amount);
+      const payDate = tr.date_paid || tr.due_date;
+      const formattedAmt = `₹${amount.toLocaleString('en-IN')}`;
+
+      if (tr.status === 'paid') {
+        recentActivity.push({
+          description: `Recorded rent transaction ${formattedAmt} for ${tenantName} on ${payDate}`,
+          type: 'rent_paid',
+          created_at: tr.created_at
+        });
+      } else if (tr.status === 'pending') {
+        recentActivity.push({
+          description: `Rent due ${formattedAmt} for ${tenantName} on ${tr.due_date}`,
+          type: 'rent_pending',
+          created_at: tr.created_at
+        });
+      } else if (tr.status === 'overdue') {
+        recentActivity.push({
+          description: `Rent overdue ${formattedAmt} for ${tenantName} since ${tr.due_date}`,
+          type: 'rent_overdue',
+          created_at: tr.created_at
+        });
+      }
+    }
+
+    for (const bill of recentBills) {
+      const tenantName = bill.tenant_name || 'Tenant';
+      const billNameRaw = bill.bill_name || 'Bill';
+      const billTitle = billNameRaw.toLowerCase().includes('bill') ? billNameRaw : `${billNameRaw} Bill`;
+      const totalAmt = Number(bill.total_amount);
+      const shareAmt = Number(bill.tenant_share);
+      const formattedTotal = `₹${totalAmt.toLocaleString('en-IN')}`;
+      const formattedShare = `₹${shareAmt.toLocaleString('en-IN')}`;
+
+      if (bill.status === 'paid') {
+        recentActivity.push({
+          description: `Recorded ${billTitle} transaction ${formattedTotal} for ${tenantName} on ${bill.due_date}`,
+          type: 'bill_paid',
+          created_at: bill.created_at
+        });
+      } else {
+        recentActivity.push({
+          description: `Uploaded bill "${billNameRaw}" for ${formattedTotal} (split: ${formattedShare} each) for ${tenantName}`,
+          type: 'bill_pending',
+          created_at: bill.created_at
+        });
+      }
+    }
+
+    for (const auto of recentAutomations) {
+      const tenantName = auto.tenant_name || 'Tenant';
+      const amount = Number(auto.amount);
+      const formattedAmt = `₹${amount.toLocaleString('en-IN')}`;
+      recentActivity.push({
+        description: `Scheduled recurrence ${formattedAmt} monthly for ${tenantName}`,
+        type: 'automation',
+        created_at: auto.created_at
+      });
+    }
+
+    // Sort all by created_at descending, take top 10
+    recentActivity.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const topActivity = recentActivity.slice(0, 10);
 
     // Upcoming dues (next 30 days)
     const today = now.toISOString().split('T')[0];
@@ -128,7 +230,7 @@ router.get('/landlord', authenticate, async (req, res) => {
       monthlyCollection,
       tenantStatus,
       recentTransactions,
-      recentActivity,
+      recentActivity: topActivity,
       upcomingDues
     });
   } catch (err) {
